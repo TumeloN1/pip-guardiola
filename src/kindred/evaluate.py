@@ -186,6 +186,29 @@ def evaluate_baselines(features: pd.DataFrame) -> dict:
     return report
 
 
+def _maybe_learned(features: pd.DataFrame, report: dict) -> None:
+    from kindred.paths import ENCODER_NPZ
+    from kindred.model import encode_matrix, load_encoder
+
+    mapping = {
+        "outfield": ENCODER_NPZ,
+        "keeper": ENCODER_NPZ.with_name("encoder_gk.npz"),
+    }
+    for role, path in mapping.items():
+        if not path.exists():
+            continue
+        bundle = load_encoder(path)
+        index = build_index(features, role=role)
+        emb = encode_matrix(bundle, index.features)
+        report["roles"][role]["learned"] = {
+            "adjacent": adjacent_season_retrieval(index, emb),
+            "position_purity_at_10": position_purity_at_k(index, emb, k=10),
+        }
+        if role == "outfield":
+            cases = json.loads(FACE_VALIDITY_PATH.read_text()) if FACE_VALIDITY_PATH.exists() else []
+            report["face_validity_learned"] = face_validity(index, emb, features, cases)
+
+
 def run(*, output: Path | None = None) -> dict:
     features = pd.read_parquet(FEATURES_PARQUET)
     report = evaluate_baselines(features)
@@ -194,6 +217,7 @@ def run(*, output: Path | None = None) -> dict:
     report["face_validity_zscore"] = face_validity(
         outfield, outfield.features, features, cases
     )
+    _maybe_learned(features, report)
     dest = output or EVAL_JSON
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(report, indent=2))
@@ -204,7 +228,9 @@ def run(*, output: Path | None = None) -> dict:
 def _print_report(report: dict) -> None:
     for role, body in report["roles"].items():
         print(f"\n== {role} n={body['n']} d={body['dims']} ==")
-        for name in ("zscore_cosine", "pca_whitened_cosine"):
+        for name in ("zscore_cosine", "pca_whitened_cosine", "learned"):
+            if name not in body:
+                continue
             adj = body[name]["adjacent"]
             pur = body[name]["position_purity_at_10"]
             print(
@@ -212,7 +238,10 @@ def _print_report(report: dict) -> None:
                 f"med_rank={adj['median_rank']:.1f}  pos_purity@10={pur['mean_purity']:.3f}"
             )
     fv = report.get("face_validity_zscore", {})
-    print(f"\nface validity: {fv.get('n_pass')}/{fv.get('n')} passed")
+    print(f"\nface validity (z-score): {fv.get('n_pass')}/{fv.get('n')} passed")
+    fvl = report.get("face_validity_learned")
+    if fvl:
+        print(f"face validity (learned): {fvl.get('n_pass')}/{fvl.get('n')} passed")
 
 
 def main(argv: list[str] | None = None) -> None:
