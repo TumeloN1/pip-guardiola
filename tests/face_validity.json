@@ -1,0 +1,62 @@
+[
+  {
+    "query": {"player": "Kevin De Bruyne", "season_end_year": 2020},
+    "k": 30,
+    "expected_any": [
+      {"player": "Bruno Fernandes", "season_end_year": 2021},
+      {"player": "Martin Ødegaard", "season_end_year": 2023},
+      {"player": "Luis Alberto", "season_end_year": 2020},
+      {"player": "Christian Eriksen", "season_end_year": 2018}
+    ]
+  },
+  {
+    "query": {"player": "Mohamed Salah", "season_end_year": 2020},
+    "k": 30,
+    "expected_any": [
+      {"player": "Sadio Mané", "season_end_year": 2020},
+      {"player": "Son Heung-min", "season_end_year": 2021},
+      {"player": "Raheem Sterling", "season_end_year": 2020},
+      {"player": "Kylian Mbappé", "season_end_year": 2021}
+    ]
+  },
+  {
+    "query": {"player": "Virgil van Dijk", "season_end_year": 2019},
+    "k": 30,
+    "expected_any": [
+      {"player": "Rúben Dias", "season_end_year": 2021},
+      {"player": "Kalidou Koulibaly", "season_end_year": 2019},
+      {"player": "Milan Škriniar", "season_end_year": 2019},
+      {"player": "Aymeric Laporte", "season_end_year": 2019}
+    ]
+  },
+  {
+    "query": {"player": "N'Golo Kanté", "season_end_year": 2018},
+    "k": 30,
+    "expected_any": [
+      {"player": "Casemiro", "season_end_year": 2018},
+      {"player": "Joshua Kimmich", "season_end_year": 2018},
+      {"player": "Declan Rice", "season_end_year": 2022},
+      {"player": "Rodri", "season_end_year": 2021}
+    ]
+  },
+  {
+    "query": {"player": "Erling Haaland", "season_end_year": 2023},
+    "k": 30,
+    "expected_any": [
+      {"player": "Robert Lewandowski", "season_end_year": 2020},
+      {"player": "Harry Kane", "season_end_year": 2021},
+      {"player": "Victor Osimhen", "season_end_year": 2023},
+      {"player": "Kylian Mbappé", "season_end_year": 2023}
+    ]
+  },
+  {
+    "query": {"player": "Andrew Robertson", "season_end_year": 2020},
+    "k": 30,
+    "expected_any": [
+      {"player": "Jordi Alba", "season_end_year": 2019},
+      {"player": "Alphonso Davies", "season_end_year": 2020},
+      {"player": "Theo Hernández", "season_end_year": 2021},
+      {"player": "João Cancelo", "season_end_year": 2021}
+    ]
+  }
+]

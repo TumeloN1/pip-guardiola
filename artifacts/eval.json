@@ -1,0 +1,170 @@
+{
+  "roles": {
+    "outfield": {
+      "n": 11866,
+      "dims": 43,
+      "zscore_cosine": {
+        "adjacent": {
+          "n": 13970,
+          "mrr": 0.1594808083320249,
+          "recall_at_10": 0.28418038654259126,
+          "median_rank": 57.0,
+          "mean_rank": 351.95375805297067
+        },
+        "position_purity_at_10": {
+          "k": 10,
+          "mean_purity": 0.8694083937299848,
+          "n": 11866
+        }
+      },
+      "pca_whitened_cosine": {
+        "adjacent": {
+          "n": 13970,
+          "mrr": 0.13503733673159524,
+          "recall_at_10": 0.24652827487473156,
+          "median_rank": 83.0,
+          "mean_rank": 608.4551181102362
+        },
+        "position_purity_at_10": {
+          "k": 10,
+          "mean_purity": 0.8048963424911513,
+          "n": 11866
+        }
+      }
+    },
+    "keeper": {
+      "n": 937,
+      "dims": 13,
+      "zscore_cosine": {
+        "adjacent": {
+          "n": 1092,
+          "mrr": 0.08565626473600169,
+          "recall_at_10": 0.16758241758241757,
+          "median_rank": 106.5,
+          "mean_rank": 186.28754578754578
+        },
+        "position_purity_at_10": {
+          "k": 10,
+          "mean_purity": 1.0,
+          "n": 937
+        }
+      },
+      "pca_whitened_cosine": {
+        "adjacent": {
+          "n": 1092,
+          "mrr": 0.1039810918972529,
+          "recall_at_10": 0.18681318681318682,
+          "median_rank": 75.0,
+          "mean_rank": 161.29578754578753
+        },
+        "position_purity_at_10": {
+          "k": 10,
+          "mean_purity": 1.0,
+          "n": 937
+        }
+      }
+    }
+  },
+  "face_validity_zscore": {
+    "n": 6,
+    "n_pass": 2,
+    "pass_rate": 0.3333333333333333,
+    "cases": [
+      {
+        "query": {
+          "player": "Kevin De Bruyne",
+          "season_end_year": 2020
+        },
+        "status": "pass",
+        "k": 30,
+        "found": [
+          "507c7bdf-2021",
+          "980522ec-2018"
+        ],
+        "ranks": [
+          5,
+          83,
+          46,
+          24
+        ]
+      },
+      {
+        "query": {
+          "player": "Mohamed Salah",
+          "season_end_year": 2020
+        },
+        "status": "fail",
+        "k": 30,
+        "found": [],
+        "ranks": [
+          85,
+          360,
+          62,
+          35
+        ]
+      },
+      {
+        "query": {
+          "player": "Virgil van Dijk",
+          "season_end_year": 2019
+        },
+        "status": "fail",
+        "k": 30,
+        "found": [],
+        "ranks": [
+          46,
+          592,
+          408,
+          706
+        ]
+      },
+      {
+        "query": {
+          "player": "N'Golo Kant\u00e9",
+          "season_end_year": 2018
+        },
+        "status": "fail",
+        "k": 30,
+        "found": [],
+        "ranks": [
+          610,
+          2958,
+          156,
+          247
+        ]
+      },
+      {
+        "query": {
+          "player": "Erling Haaland",
+          "season_end_year": 2023
+        },
+        "status": "pass",
+        "k": 30,
+        "found": [
+          "8d78e732-2020"
+        ],
+        "ranks": [
+          26,
+          332,
+          75,
+          568
+        ]
+      },
+      {
+        "query": {
+          "player": "Andrew Robertson",
+          "season_end_year": 2020
+        },
+        "status": "fail",
+        "k": 30,
+        "found": [],
+        "ranks": [
+          31,
+          381,
+          876,
+          207
+        ]
+      }
+    ]
+  }
+}
