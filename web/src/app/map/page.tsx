@@ -49,7 +49,7 @@ export default function MapPage() {
                 const y = 620 - ((p.y - layout.minY) / layout.h) * 600;
                 const highlighted = hover?.id === p.id;
                 return (
-                  <a href={`/player/${p.id}`}>
+                  <a key={p.id} href={`/player/${p.id}`}>
                     <circle
                       cx={x}
                       cy={y}

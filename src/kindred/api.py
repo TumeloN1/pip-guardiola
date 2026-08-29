@@ -355,7 +355,7 @@ def _pretty(name: str) -> str:
 
 
 @app.get("/api/projection")
-def get_projection(role: str = "outfield") -> dict:
+def get_projection(role: str = "outfield", sample: int = 2500) -> dict:
     st = state()
     index: MatrixIndex = st["indexes"][role]
     if st["projection"] is not None and f"{role}_xy" in st["projection"]:
@@ -368,16 +368,21 @@ def get_projection(role: str = "outfield") -> dict:
             if j is None:
                 continue
             points.append(_row_payload(index, n, {"x": float(xy[j, 0]), "y": float(xy[j, 1])}))
-        return {"points": points, "source": "learned"}
-    # Fallback: 2-D PCA of the z-scored matrix.
-    from sklearn.decomposition import PCA
+        source = "learned"
+    else:
+        from sklearn.decomposition import PCA
 
-    xy = PCA(n_components=2, random_state=0).fit_transform(index.features)
-    points = [
-        _row_payload(index, n, {"x": float(xy[n, 0]), "y": float(xy[n, 1])})
-        for n in range(len(index.ids))
-    ]
-    return {"points": points, "source": "pca"}
+        xy = PCA(n_components=2, random_state=0).fit_transform(index.features)
+        points = [
+            _row_payload(index, n, {"x": float(xy[n, 0]), "y": float(xy[n, 1])})
+            for n in range(len(index.ids))
+        ]
+        source = "pca"
+    if sample and len(points) > sample:
+        rng = np.random.default_rng(0)
+        pick = rng.choice(len(points), size=sample, replace=False)
+        points = [points[i] for i in sorted(pick.tolist())]
+    return {"points": points, "source": source}
 
 
 def main(argv: list[str] | None = None) -> None:
