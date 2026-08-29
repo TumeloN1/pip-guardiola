@@ -116,14 +116,44 @@ def _row_payload(index: MatrixIndex, i: int, extra: dict | None = None) -> dict:
     return body
 
 
+def _weights_are_default(index: MatrixIndex, weights: dict[str, float] | None) -> bool:
+    defaults = DEFAULT_GK_WEIGHTS if index.role == "keeper" else DEFAULT_WEIGHTS
+    if not weights:
+        return True
+    return all(abs(float(weights.get(k, 1.0)) - 1.0) < 1e-6 for k in defaults)
+
+
+def _cached_embeddings(index: MatrixIndex) -> np.ndarray | None:
+    st = state()
+    key = "outfield" if index.role == "outfield" else "keeper"
+    if key not in st["embeddings"] or f"{key}_ids" not in st["embeddings"]:
+        return None
+    ids = np.asarray(st["embeddings"][f"{key}_ids"]).astype(str)
+    emb = st["embeddings"][key]
+    lookup = {pid: i for i, pid in enumerate(ids)}
+    try:
+        order = np.array([lookup[str(pid)] for pid in index.ids])
+    except KeyError:
+        return None
+    return emb[order]
+
+
 def _active_matrix(index: MatrixIndex, weights: dict[str, float] | None) -> np.ndarray:
     st = state()
-    encoder = st["encoder_gk"] if index.role == "keeper" else st["encoder"]
+    scaled = weighted_matrix(index, weights)
+    if index.role == "keeper":
+        from kindred.similarity import pca_whiten
+
+        return pca_whiten(scaled, n_components=min(12, scaled.shape[1]))
+    encoder = st["encoder"]
     if encoder is None:
-        return weighted_matrix(index, weights)
+        return scaled
+    if _weights_are_default(index, weights):
+        cached = _cached_embeddings(index)
+        if cached is not None:
+            return cached
     from kindred.model import encode_matrix
 
-    scaled = weighted_matrix(index, weights)
     return encode_matrix(encoder, scaled)
 
 
@@ -231,14 +261,13 @@ def get_similar(
     explained = []
     st = state()
     for hit in hits:
-        if st["encoder"] is None:
+        if index.role == "keeper" or st["encoder"] is None:
             hit["groups"] = group_match_explanations(index, player_id, hit["player_id"], weight_map)
         else:
             from kindred.cluster import gradient_group_explanations
 
-            bundle = st["encoder_gk"] if index.role == "keeper" else st["encoder"]
             hit["groups"] = gradient_group_explanations(
-                bundle, index, player_id, hit["player_id"], weight_map
+                st["encoder"], index, player_id, hit["player_id"], weight_map
             )
         explained.append(hit)
     qi = index.id_to_row()[player_id]
@@ -264,10 +293,13 @@ def get_profile(player_id: str) -> dict:
             percentiles[name] = float((finite <= value).mean() * 100.0)
     archetypes = []
     st = state()
-    if st["gmm"] is not None and role == "outfield":
+    if st["gmm"] is not None and role == "outfield" and "outfield" in st["embeddings"]:
         from kindred.cluster import responsibilities_for
 
-        archetypes = responsibilities_for(st["gmm"], index.features[i])
+        ids = np.asarray(st["embeddings"]["outfield_ids"]).astype(str)
+        loc = np.where(ids == player_id)[0]
+        if loc.size:
+            archetypes = responsibilities_for(st["gmm"], st["embeddings"]["outfield"][int(loc[0])])
     radar_keys = {
         "outfield": [
             "npxg_p90",
