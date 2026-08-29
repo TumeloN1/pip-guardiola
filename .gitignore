@@ -16,7 +16,9 @@ data/raw/
 web/node_modules/
 web/.next/
 web/out/
-web/.turbo/
+web/AGENTS.md
+web/CLAUDE.md
+
 
 # Local env
 .env
