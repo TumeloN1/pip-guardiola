@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { sliderNumber, sliderPair } from "@/lib/slider-value";
 
 const COMPS = ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1"] as const;
 const POSITIONS = ["DF", "MF", "FW", "GK"] as const;
@@ -44,7 +45,7 @@ export function FiltersCard({
             max={2025}
             value={[value.eraStart, value.eraEnd]}
             onValueChange={(v) => {
-              const [a, b] = v;
+              const [a, b] = sliderPair(v, [value.eraStart, value.eraEnd]);
               onChange({ ...value, eraStart: Math.min(a, b), eraEnd: Math.max(a, b) });
             }}
           />
@@ -95,7 +96,7 @@ export function FiltersCard({
             max={3000}
             step={90}
             value={[value.minMinutes]}
-            onValueChange={(v) => onChange({ ...value, minMinutes: v[0] })}
+            onValueChange={(v) => onChange({ ...value, minMinutes: sliderNumber(v, value.minMinutes) })}
           />
         </div>
       </CardContent>

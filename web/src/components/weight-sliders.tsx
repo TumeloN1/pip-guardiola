@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { sliderNumber } from "@/lib/slider-value";
 
 const LABELS: Record<string, string> = {
   finishing: "Finishing",
@@ -46,21 +47,24 @@ export function WeightSliders({
         <p className="text-sm text-muted-foreground">
           Re-rank live. Turn defending up to find destroyers; turn carrying up to find dribblers.
         </p>
-        {keys.map((key) => (
-          <div key={key}>
-            <Label className="mb-1 flex justify-between">
-              <span>{LABELS[key] ?? key}</span>
-              <span className="tabular-nums text-muted-foreground">{weights[key].toFixed(1)}×</span>
-            </Label>
-            <Slider
-              min={0}
-              max={3}
-              step={0.1}
-              value={[weights[key]]}
-              onValueChange={(v) => onChange({ ...weights, [key]: v[0] })}
-            />
-          </div>
-        ))}
+        {keys.map((key) => {
+          const current = sliderNumber(weights[key], 1);
+          return (
+            <div key={key}>
+              <Label className="mb-1 flex justify-between">
+                <span>{LABELS[key] ?? key}</span>
+                <span className="tabular-nums text-muted-foreground">{current.toFixed(1)}×</span>
+              </Label>
+              <Slider
+                min={0}
+                max={3}
+                step={0.1}
+                value={[current]}
+                onValueChange={(v) => onChange({ ...weights, [key]: sliderNumber(v, current) })}
+              />
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
