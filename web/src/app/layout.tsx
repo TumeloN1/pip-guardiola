@@ -20,7 +20,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Kindred — playstyle analogues",
+  title: "Pip Guardiola — playstyle analogues",
   description:
     "Look up a player-season and find the footballers whose playing style is most similar, across era and league.",
 };

@@ -53,7 +53,7 @@ export function PlayerSearch({ autoFocus = false }: { autoFocus?: boolean }) {
       <CommandList>
         {status === "error" && (
           <div className="px-3 py-4 text-sm text-destructive">
-            Couldn’t reach the Kindred API. {error}
+            Couldn’t reach the API. {error}
           </div>
         )}
         {query.trim().length >= 2 && status === "loading" && hits.length === 0 && (

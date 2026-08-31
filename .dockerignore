@@ -1,0 +1,10 @@
+.venv
+__pycache__
+.pytest_cache
+.git
+data/raw
+*.rds
+web/node_modules
+web/.next
+**/*.pyc
+.cursor

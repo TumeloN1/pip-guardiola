@@ -23,7 +23,7 @@ export default function HomePage() {
           Who plays like him?
         </h1>
         <p className="mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-          Kindred looks up a player-season and ranks stylistic analogues — not teammates, not
+          Pip Guardiola looks up a player-season and ranks stylistic analogues — not teammates, not
           output clones. Filter by era, league, position, and minutes. Re-weight finishing,
           carrying, or defending live.
         </p>

@@ -6,10 +6,10 @@ export function SiteHeader({ compact = false }: { compact?: boolean }) {
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <Link href="/" className="flex items-baseline gap-2">
           <span
-            className="text-2xl tracking-tight text-primary"
+            className="text-xl tracking-tight text-primary sm:text-2xl"
             style={{ fontFamily: "var(--font-serif)" }}
           >
-            Kindred
+            Pip Guardiola
           </span>
           {!compact && (
             <span className="hidden text-xs uppercase tracking-[0.18em] text-muted-foreground sm:inline">

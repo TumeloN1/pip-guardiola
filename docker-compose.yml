@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8317:8317"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        KINDRED_API_URL: http://api:8317
+    environment:
+      KINDRED_API_URL: http://api:8317
+    ports:
+      - "43917:43917"
+    depends_on:
+      - api
+    restart: unless-stopped

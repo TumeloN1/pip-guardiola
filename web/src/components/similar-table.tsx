@@ -39,7 +39,7 @@ export function SimilarTable({
       <CardHeader>
         <CardTitle>Closest stylistic matches</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Ranked by {metric === "learned" ? "the learned Kindred metric" : "z-scored cosine"} ·
+          Ranked by {metric === "learned" ? "Pip Guardiola’s learned metric" : "z-scored cosine"} ·
           columns explain which feature groups lined up
         </p>
       </CardHeader>

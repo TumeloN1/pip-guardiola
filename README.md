@@ -1,8 +1,8 @@
-# Kindred
+# Pip Guardiola
 
 Soccer playstyle similarity. Look up a player-season — the canonical example is **Kevin De Bruyne, 2019-20** — and rank the footballers whose *style* is closest, not the ones who scored the same number of goals.
 
-The dashboard filters by era, competition, position, and minutes. Weight sliders re-encode and re-rank live. A JAX contrastive encoder learns the metric; clustering is used only to label the space, not to retrieve.
+The dashboard (**Pip Guardiola**) filters by era, competition, position, and minutes. Weight sliders re-encode and re-rank live. A JAX contrastive encoder learns the metric; clustering is used only to label the space, not to retrieve. Python package paths still live under `src/kindred/` — that is internal, not the product name.
 
 ## Run it
 
@@ -25,6 +25,28 @@ npm run dev                    # http://127.0.0.1:43917
 ```
 
 Processed artifacts (`player_seasons.parquet`, features, encoder, eval) are committed, so the API and UI work without re-downloading FBref. Re-run ingest if you want a fresher mirror.
+
+## Deploy this early version
+
+This is two processes, not a static site: Next.js on **43917** (SSR + `/api` reverse-proxy) and FastAPI/JAX on **8317** (encoder, GMM, parquet). Artifacts are ~16 MB and already in git, so you do not need FBref at runtime. CPU is enough; budget **~1–2 GB RAM** for jaxlib + the 12k-row index.
+
+**Do not put the API on Vercel.** Vercel is fine for the Next.js UI alone, but the ranking service is Python + JAX with a live encoder. Serverless timeouts and the missing JAX layer will fight you. Use a real container or VM for the API, and either:
+
+1. **One box, two containers (recommended for v0)** — `docker compose up --build`, then put Caddy/nginx or a tunnel in front of port 43917. The web container already proxies `/api` to the API container.
+
+```bash
+docker compose up --build
+# UI:  http://localhost:43917
+# API: http://localhost:8317/api/health
+```
+
+2. **Fly.io or Railway as two services** — same Dockerfiles. Point the web service's `KINDRED_API_URL` at the private API hostname (`http://api:8317` on Compose, `http://<api-app>.internal:8317` on Fly). Give the API at least 1 GB RAM. Fly's `fly launch` against `Dockerfile.api` and `web/Dockerfile` is the least ceremony if you want a public URL this week.
+
+3. **A single cheap VPS** (Hetzner/DigitalOcean, 2 GB) — clone, `docker compose up -d`, point a domain at 43917. Simplest ops if you are fine SSH-ing.
+
+Skip for now: GPU hosts (dataset is tiny), a database (everything is parquet on disk), and auth. Add those when someone besides you is hitting it.
+
+The Compose file is the contract. If a platform cannot run both `Dockerfile.api` and `web/Dockerfile` with `KINDRED_API_URL` pointing at the API, it is the wrong platform for this app.
 
 ## What the numbers say
 
