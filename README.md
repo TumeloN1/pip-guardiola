@@ -26,27 +26,50 @@ npm run dev                    # http://127.0.0.1:43917
 
 Processed artifacts (`player_seasons.parquet`, features, encoder, eval) are committed, so the API and UI work without re-downloading FBref. Re-run ingest if you want a fresher mirror.
 
-## Deploy this early version
+## Deploy on AWS Lightsail
 
-This is two processes, not a static site: Next.js on **43917** (SSR + `/api` reverse-proxy) and FastAPI/JAX on **8317** (encoder, GMM, parquet). Artifacts are ~16 MB and already in git, so you do not need FBref at runtime. CPU is enough; budget **~1–2 GB RAM** for jaxlib + the 12k-row index.
+This is the intended host: one Ubuntu instance, Docker Compose, Caddy on 80/443. The API stays on the private compose network (not exposed).
 
-**Do not put the API on Vercel.** Vercel is fine for the Next.js UI alone, but the ranking service is Python + JAX with a live encoder. Serverless timeouts and the missing JAX layer will fight you. Use a real container or VM for the API, and either:
+**Instance.** Ubuntu 24.04, **2 GB RAM / 1 vCPU** ($10/mo) is the floor — 512 MB and 1 GB boxes will OOM while pulling jaxlib. **4 GB** ($20) is more comfortable. Attach a **static IP** the moment the instance exists so the address does not change on reboot.
 
-1. **One box, two containers (recommended for v0)** — `docker compose up --build`, then put Caddy/nginx or a tunnel in front of port 43917. The web container already proxies `/api` to the API container.
+**Firewall (Lightsail → Networking).** SSH 22, HTTP 80, HTTPS 443. Leave 8317 and 43917 closed.
+
+**First boot** (SSH in as `ubuntu`):
 
 ```bash
-docker compose up --build
-# UI:  http://localhost:43917
-# API: http://localhost:8317/api/health
+curl -fsSL https://raw.githubusercontent.com/TumeloN1/pip-guardiola/main/deploy/lightsail-setup.sh | bash
 ```
 
-2. **Fly.io or Railway as two services** — same Dockerfiles. Point the web service's `KINDRED_API_URL` at the private API hostname (`http://api:8317` on Compose, `http://<api-app>.internal:8317` on Fly). Give the API at least 1 GB RAM. Fly's `fly launch` against `Dockerfile.api` and `web/Dockerfile` is the least ceremony if you want a public URL this week.
+That script adds 2 GB of swap (needed on the $10 box for the image build), installs Docker, clones this repo to `/opt/pip-guardiola`, and runs:
 
-3. **A single cheap VPS** (Hetzner/DigitalOcean, 2 GB) — clone, `docker compose up -d`, point a domain at 43917. Simplest ops if you are fine SSH-ing.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d --build
+```
 
-Skip for now: GPU hosts (dataset is tiny), a database (everything is parquet on disk), and auth. Add those when someone besides you is hitting it.
+Open `http://<static-ip>/`. The first build takes several minutes (jaxlib).
 
-The Compose file is the contract. If a platform cannot run both `Dockerfile.api` and `web/Dockerfile` with `KINDRED_API_URL` pointing at the API, it is the wrong platform for this app.
+**Domain + HTTPS.** Point an A record at the static IP, then on the box:
+
+```bash
+cd /opt/pip-guardiola
+# .env
+#   SITE_ADDRESS=pip.example.com
+sudo docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d
+```
+
+Caddy issues a Let’s Encrypt cert automatically when `SITE_ADDRESS` is a hostname. Keep it at `:80` until DNS actually points here or issuance will fail.
+
+**Updates.**
+
+```bash
+cd /opt/pip-guardiola
+git pull
+sudo docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d --build
+```
+
+Local `docker compose up` (no overlay) still binds 43917/8317 for development. The Lightsail overlay is what you run on the VPS.
+
+Skip for now: GPU, a database, auth, and splitting the UI onto Vercel. None of those help this early version.
 
 ## What the numbers say
 
