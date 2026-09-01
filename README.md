@@ -4,7 +4,7 @@ Look up a footballer-season and rank who *plays* like them — not who scored th
 
 **Live: [pipguardiola.com](https://pipguardiola.com)**
 
-Canonical example: **Kevin De Bruyne, 2019-20**. Filter by era, league, position, and minutes; re-weight finishing, carrying, or defending live. Named playing styles (wide creator, destroyer, poacher, …) are a label overlay, not how retrieval works.
+Canonical example: **Kevin De Bruyne, 2019-20**. Filter by era, league, position, and minutes. Named playing styles (wide creator, destroyer, poacher, …) are a label overlay, not how retrieval works.
 
 ## How it works
 

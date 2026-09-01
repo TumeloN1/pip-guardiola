@@ -336,8 +336,49 @@ def get_profile(player_id: str) -> dict:
         "percentiles": percentiles,
         "radar": radar,
         "archetypes": archetypes,
+        "headline": _headline(st["features"], player_id, role),
         "groups": list(index.groups.keys()),
     }
+
+
+def _headline(features: pd.DataFrame, player_id: str, role: str) -> list[dict]:
+    hit = features.loc[features["player_id"] == player_id]
+    if hit.empty:
+        return []
+    r = hit.iloc[0]
+
+    def fmt(col: str, digits: int = 0) -> str | None:
+        if col not in r.index or pd.isna(r[col]):
+            return None
+        value = float(r[col])
+        if digits == 0:
+            return str(int(round(value)))
+        return f"{value:.{digits}f}"
+
+    if role == "keeper":
+        spec = [
+            ("Minutes", "minutes", 0),
+            ("Saves", "gk_saves", 0),
+            ("Shots faced", "gk_sota", 0),
+            ("Clean sheets", "gk_cs", 0),
+            ("PSxG +/-", "gk_psxg_plus_minus", 1),
+        ]
+    else:
+        spec = [
+            ("Minutes", "minutes", 0),
+            ("Goals", "gls", 0),
+            ("Assists", "ast", 0),
+            ("npxG", "npxg", 1),
+            ("xAG", "xag", 1),
+            ("Key passes", "kp", 0),
+            ("Prog. passes", "prg_p", 0),
+        ]
+    items = []
+    for label, col, digits in spec:
+        value = fmt(col, digits)
+        if value is not None:
+            items.append({"label": label, "value": value})
+    return items
 
 
 def _pretty(name: str) -> str:

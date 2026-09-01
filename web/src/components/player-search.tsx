@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Command,
@@ -10,6 +10,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { ProfileLoadingOverlay } from "@/components/player-profile-skeleton";
 import { searchPlayers } from "@/lib/api";
 import type { PlayerHit } from "@/lib/types";
 
@@ -21,6 +22,7 @@ export function PlayerSearch({
   variant?: "hero" | "header";
 }) {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<PlayerHit[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -60,7 +62,9 @@ export function PlayerSearch({
     setQuery("");
     setHits([]);
     setOpen(false);
-    router.push(`/player/${id}`);
+    startTransition(() => {
+      router.push(`/player/${id}`);
+    });
   }
 
   const list = (
@@ -103,7 +107,9 @@ export function PlayerSearch({
 
   if (variant === "header") {
     return (
-      <div className="relative w-full max-w-md">
+      <>
+        {pending && <ProfileLoadingOverlay />}
+        <div className="relative w-full max-w-md">
         <input
           autoFocus={autoFocus}
           value={query}
@@ -118,12 +124,15 @@ export function PlayerSearch({
             {list}
           </div>
         )}
-      </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <Command className="!rounded-none border border-border bg-card shadow-sm" shouldFilter={false}>
+    <>
+      {pending && <ProfileLoadingOverlay />}
+      <Command className="!rounded-none border border-border bg-card shadow-sm" shouldFilter={false}>
       <CommandInput
         autoFocus={autoFocus}
         placeholder="Search a player — try De Bruyne, Kanté, Haaland…"
@@ -159,5 +168,6 @@ export function PlayerSearch({
         )}
       </CommandList>
     </Command>
+    </>
   );
 }

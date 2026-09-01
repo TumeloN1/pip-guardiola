@@ -194,6 +194,7 @@ def similar(
             "comp": str(index.comps[row]),
             "pos": str(index.positions[row]),
             "minutes": float(index.minutes[row]),
+            "fbref_id": str(index.fbref_ids[row]),
             "similarity": float(score),
         })
     return results
