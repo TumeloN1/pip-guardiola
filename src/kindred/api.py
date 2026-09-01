@@ -303,7 +303,12 @@ def get_profile(player_id: str) -> dict:
     if role == "outfield" and st["gmm"] is not None:
         from kindred.cluster import top_archetypes
 
-        archetypes = top_archetypes(st["gmm"], index.features[i])
+        archetypes = top_archetypes(
+            st["gmm"],
+            index.features[i],
+            pos=str(index.positions[i]),
+            primary_pos=str(index.primary_pos[i]),
+        )
     elif role == "keeper":
         from kindred.cluster import keeper_archetypes
 

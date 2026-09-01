@@ -22,101 +22,123 @@ from kindred.paths import EMBEDDINGS_NPZ, FEATURES_PARQUET, GMM_NPZ, PROJECTION_
 
 N_ARCHETYPES = 16
 
+# Drop styles below this share — noise, not an actionable role. Kept in the
+# mid-teens so hybrid wide/midfield seasons can still surface a second family.
+DISPLAY_THRESHOLD = 0.16
+
+_OUTFIELD_POS = {"DF", "MF", "FW"}
+
 # Prototypes: high / low z-score features a season of that style should show.
 ARCHETYPE_CATALOG: list[dict] = [
     {
         "name": "Deep-lying playmaker",
         "blurb": "Dictates from deep: progressive passes, switches, and key balls without hunting goals.",
+        "positions": ["MF"],
         "high": ["prg_p_p90", "pass_long_share", "kp_p90", "pass_att_p90", "prg_pass_share"],
         "low": ["npxg_p90", "touch_att_pen_share", "gls_p90"],
     },
     {
         "name": "Box-to-box midfielder",
         "blurb": "Covers both boxes: progressive carries, tackles, and a share of chance creation.",
+        "positions": ["MF"],
         "high": ["prg_c_p90", "padj_tkl", "xag_p90", "carries_p90", "touch_mid3_share"],
         "low": ["touch_def_pen_share"],
     },
     {
         "name": "Destroyer",
         "blurb": "Wins the ball and stays compact: tackles, interceptions, blocks, clearances.",
+        "positions": ["MF", "DF"],
         "high": ["padj_tkl", "padj_int", "padj_blocks", "padj_clr", "tkl_def_share"],
         "low": ["npxg_p90", "prg_c_p90", "touch_att_pen_share"],
     },
     {
         "name": "Ball-playing centre-back",
         "blurb": "Starts attacks from the back: progressive passing and switches, not just clearances.",
+        "positions": ["DF"],
         "high": ["prg_p_p90", "pass_long_share", "pass_att_p90", "carries_p90", "touch_def3_share"],
         "low": ["npxg_p90", "touch_att_pen_share"],
     },
     {
         "name": "Stopper",
         "blurb": "Old-school centre-back: aerials, clearances, and blocks in the defensive box.",
+        "positions": ["DF"],
         "high": ["padj_clr", "aerial_p90", "padj_blocks", "touch_def_pen_share", "aerial_win_share"],
         "low": ["prg_p_p90", "prg_c_p90"],
     },
     {
         "name": "Overlapping full-back",
         "blurb": "Attacks the flank: progressive carries, crosses, and touches in the attacking third.",
+        "positions": ["DF"],
         "high": ["prg_c_p90", "touch_att3_share", "carries_p90", "prg_r_p90", "tkl_att_share"],
         "low": ["npxg_p90"],
     },
     {
         "name": "Inverted full-back",
         "blurb": "Tucks inside to pass: progressive passing volume over crossing and wide carries.",
+        "positions": ["DF"],
         "high": ["prg_p_p90", "pass_att_p90", "touch_mid3_share", "carries_p90", "pass_short_share"],
         "low": ["take_att_p90", "touch_att_pen_share"],
     },
     {
         "name": "Wing-back",
         "blurb": "High and wide all game: progressive receptions, attacking-third volume, and defensive work on the flank.",
+        "positions": ["DF", "MF"],
         "high": ["prg_r_p90", "padj_tkl", "touch_att3_share", "prg_c_p90", "tkl_att_share"],
         "low": ["touch_def_pen_share"],
     },
     {
         "name": "Wide creator",
         "blurb": "Supplies from the wing: key passes, xAG, and progressive receptions.",
+        "positions": ["FW", "MF"],
         "high": ["kp_p90", "xag_p90", "ppa_p90", "prg_r_p90", "ast_p90"],
         "low": ["padj_clr"],
     },
     {
         "name": "Inside forward",
         "blurb": "Cuts inside to finish: xG, shots, and penalty-box touches rather than hold-up play.",
+        "positions": ["FW", "MF"],
         "high": ["npxg_p90", "sh_p90", "touch_att_pen_share", "prg_c_p90", "cpa_p90"],
         "low": ["aerial_p90", "padj_tkl"],
     },
     {
         "name": "Winger",
         "blurb": "Stretches the pitch: take-ons, progressive carries, and attacking-third volume.",
+        "positions": ["FW", "MF"],
         "high": ["take_att_p90", "prg_c_p90", "touch_att3_share", "carries_p90", "takeons_per_touch"],
         "low": ["padj_clr"],
     },
     {
         "name": "Target striker",
         "blurb": "Holds the ball up and wins aerials in the box; finishing volume over chance creation.",
+        "positions": ["FW"],
         "high": ["aerial_p90", "touch_att_pen_share", "npxg_p90", "sh_p90", "aerial_win_share"],
         "low": ["prg_p_p90", "take_att_p90"],
     },
     {
         "name": "Poacher",
         "blurb": "Lives in the six-yard box: shots and xG, almost no defensive or build-up work.",
+        "positions": ["FW"],
         "high": ["npxg_p90", "sh_p90", "touch_att_pen_share", "gls_p90", "sot_p90"],
         "low": ["padj_tkl", "prg_p_p90", "touch_mid3_share"],
     },
     {
         "name": "False nine",
         "blurb": "Drops off the front to combine: key passes and xAG with some finishing threat.",
+        "positions": ["FW"],
         "high": ["kp_p90", "xag_p90", "ppa_p90", "prg_r_p90", "pass_att_p90"],
         "low": ["padj_clr", "aerial_p90"],
     },
     {
         "name": "Shadow striker",
         "blurb": "Arrives from midfield: penalty-box touches, shots, and progressive receptions.",
+        "positions": ["FW", "MF"],
         "high": ["touch_att_pen_share", "sh_p90", "prg_r_p90", "npxg_p90", "cpa_p90"],
         "low": ["padj_clr", "padj_blocks"],
     },
     {
         "name": "Pressing forward",
         "blurb": "Leads the press from the front: tackles and interceptions plus attacking-third work.",
+        "positions": ["FW", "MF"],
         "high": ["padj_tkl", "padj_int", "touch_att3_share", "sh_p90", "tkl_att_share"],
         "low": ["padj_clr"],
     },
@@ -295,29 +317,93 @@ def prototype_scores(x_z: np.ndarray, names: list[str] | None = None) -> np.ndar
     return pn @ xn
 
 
-def top_archetypes(fit: ClusterFit | None, x_z: np.ndarray, n: int = 3) -> list[dict]:
+def _pos_tokens(pos: object = "", primary_pos: object = "") -> set[str]:
+    tokens: set[str] = set()
+    for raw in (pos, primary_pos):
+        if raw is None:
+            continue
+        for part in str(raw).split(","):
+            tok = part.strip().upper()
+            if tok in _OUTFIELD_POS:
+                tokens.add(tok)
+    return tokens
+
+
+def _compatible(spec: dict, tokens: set[str]) -> bool:
+    allowed = spec.get("positions")
+    if not allowed or not tokens:
+        return True
+    return bool(tokens.intersection(allowed))
+
+
+def top_archetypes(
+    fit: ClusterFit | None,
+    x_z: np.ndarray,
+    n: int = 5,
+    *,
+    pos: str = "",
+    primary_pos: str = "",
+    min_weight: float = DISPLAY_THRESHOLD,
+) -> list[dict]:
+    """Named archetypes gated by FBref position and a display threshold.
+
+    Catalog rows whose ``positions`` do not intersect the player's FBref tokens
+    are zeroed before softmax, so an overlapping full-back cannot pick up False
+    nine. Hybrids such as ``DF,MF`` keep both families. Weights below
+    ``min_weight`` (default 16%) are dropped; if that would empty the list, the
+    single best compatible style is kept.
+    """
     names = list(fit.feature_names) if fit is not None else list(OUTFIELD_FEATURES)
+    tokens = _pos_tokens(pos, primary_pos)
     scores = prototype_scores(x_z, names)
+    for i, spec in enumerate(ARCHETYPE_CATALOG):
+        if not _compatible(spec, tokens):
+            scores[i] = -1e9
+    if float(np.max(scores)) < -1e8:
+        scores = prototype_scores(x_z, names)
     tau = 0.12
     z = scores / tau
     z = z - z.max()
-    p = np.exp(z)
-    p = p / p.sum()
+    p = np.exp(np.clip(z, -50, 50))
+    p = p / max(float(p.sum()), 1e-12)
     order = np.argsort(-p)
-    out = []
-    for k in order[:n]:
-        if p[k] < 0.08:
-            continue
+    out: list[dict] = []
+    for k in order:
         spec = ARCHETYPE_CATALOG[int(k)]
-        out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": float(p[k])})
+        if not _compatible(spec, tokens):
+            continue
+        wt = float(p[k])
+        if wt < min_weight:
+            continue
+        out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": wt})
+        if len(out) >= n:
+            break
+    if not out:
+        for k in order:
+            spec = ARCHETYPE_CATALOG[int(k)]
+            if tokens and not _compatible(spec, tokens):
+                continue
+            out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": float(p[k])})
+            break
     return out
 
 
-def responsibilities_for(fit: ClusterFit, x_z: np.ndarray) -> list[dict]:
-    return top_archetypes(fit, x_z)
+def responsibilities_for(
+    fit: ClusterFit,
+    x_z: np.ndarray,
+    *,
+    pos: str = "",
+    primary_pos: str = "",
+) -> list[dict]:
+    return top_archetypes(fit, x_z, pos=pos, primary_pos=primary_pos)
 
 
-def keeper_archetypes(x_z: np.ndarray, n: int = 2) -> list[dict]:
+def keeper_archetypes(
+    x_z: np.ndarray,
+    n: int = 2,
+    *,
+    min_weight: float = DISPLAY_THRESHOLD,
+) -> list[dict]:
     idx = _feat_index(GK_FEATURES)
     x = np.nan_to_num(np.asarray(x_z, dtype=np.float64).reshape(-1), nan=0.0)
     scores = []
@@ -328,14 +414,21 @@ def keeper_archetypes(x_z: np.ndarray, n: int = 2) -> list[dict]:
         scores.append(score)
     arr = np.asarray(scores, dtype=np.float64)
     arr = arr - arr.max()
-    p = np.exp(arr)
-    p = p / p.sum()
+    p = np.exp(np.clip(arr, -50, 50))
+    p = p / max(float(p.sum()), 1e-12)
     order = np.argsort(-p)
-    out = []
-    for i in order[:n]:
-        if p[i] < 0.12:
+    out: list[dict] = []
+    for i in order:
+        wt = float(p[i])
+        if wt < min_weight:
             continue
         spec = KEEPER_CATALOG[int(i)]
+        out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": wt})
+        if len(out) >= n:
+            break
+    if not out:
+        i = int(order[0])
+        spec = KEEPER_CATALOG[i]
         out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": float(p[i])})
     return out
 
