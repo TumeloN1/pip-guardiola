@@ -1,0 +1,42 @@
+name: Deploy Lightsail
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: lightsail-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Require Lightsail secrets
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          USER: ${{ secrets.LIGHTSAIL_USER }}
+          KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          missing=0
+          [ -n "$HOST" ] || { echo "Missing secret LIGHTSAIL_HOST"; missing=1; }
+          [ -n "$USER" ] || { echo "Missing secret LIGHTSAIL_USER"; missing=1; }
+          [ -n "$KEY" ] || { echo "Missing secret LIGHTSAIL_SSH_KEY"; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "Add them at https://github.com/TumeloN1/pip-guardiola/settings/secrets/actions"
+            exit 1
+          fi
+
+      - name: Run update.sh on the Lightsail box
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          command_timeout: 30m
+          script_stop: true
+          script: |
+            set -euo pipefail
+            /opt/pip-guardiola/deploy/update.sh
