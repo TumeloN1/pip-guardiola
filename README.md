@@ -59,7 +59,11 @@ sudo docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d
 
 Caddy issues a Let’s Encrypt cert automatically when `SITE_ADDRESS` is a hostname. Keep it at `:80` until DNS actually points here or issuance will fail.
 
-**Updates.** Pushes to `main` rebuild the box when GitHub Actions can SSH in. Add these repository secrets:
+**Updates.** Pushes to `main` can rebuild the box via GitHub Actions. Copy `deploy/github-action-deploy.yml` to `.github/workflows/deploy.yml` in the GitHub UI (or a PAT with the `workflow` scope), then add these repository secrets:
+
+- `LIGHTSAIL_HOST` — static IP or `pipguardiola.com`
+- `LIGHTSAIL_USER` — usually `ubuntu`
+- `LIGHTSAIL_SSH_KEY` — private key whose public half is in `ubuntu`'s `authorized_keys`
 
 - `LIGHTSAIL_HOST` — static IP or `pipguardiola.com`
 - `LIGHTSAIL_USER` — usually `ubuntu`
