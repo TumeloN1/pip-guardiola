@@ -388,6 +388,32 @@ def top_archetypes(
     return out
 
 
+def leading_style_names(
+    X: np.ndarray,
+    positions: np.ndarray,
+    primary_pos: np.ndarray,
+    names: list[str] | None = None,
+) -> list[str]:
+    """Leading catalog style for each row, same gating as ``top_archetypes``."""
+    feat_names = names or list(OUTFIELD_FEATURES)
+    proto = _prototype_vectors(feat_names, ARCHETYPE_CATALOG)
+    mat = np.nan_to_num(np.asarray(X, dtype=np.float64)[:, : len(feat_names)], nan=0.0)
+    xn = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-8)
+    pn = proto / (np.linalg.norm(proto, axis=1, keepdims=True) + 1e-8)
+    scores = xn @ pn.T
+    labels: list[str] = []
+    for i in range(scores.shape[0]):
+        tokens = _pos_tokens(positions[i], primary_pos[i])
+        row = scores[i].copy()
+        for j, spec in enumerate(ARCHETYPE_CATALOG):
+            if not _compatible(spec, tokens):
+                row[j] = -1e9
+        if float(row.max()) < -1e8:
+            row = scores[i]
+        labels.append(ARCHETYPE_CATALOG[int(np.argmax(row))]["name"])
+    return labels
+
+
 def responsibilities_for(
     fit: ClusterFit,
     x_z: np.ndarray,

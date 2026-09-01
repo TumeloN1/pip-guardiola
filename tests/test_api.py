@@ -73,3 +73,13 @@ def test_health_and_kdb_similar():
     assert "Wide creator" not in taa_names
     for row in taa_arch:
         assert row["weight"] >= 0.16
+
+    proj = client.get("/api/projection", params={"role": "outfield", "sample": 400})
+    assert proj.status_code == 200
+    blob = proj.json()
+    assert blob["styles"]
+    assert blob["points"]
+    for point in blob["points"]:
+        assert point["style"] in blob["styles"]
+        if point.get("pos") == "DF":
+            assert point["style"] not in {"False nine", "Poacher", "Target striker", "Wide creator"}
