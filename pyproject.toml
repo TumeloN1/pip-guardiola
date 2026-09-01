@@ -1,7 +1,7 @@
 [project]
 name = "kindred"
 version = "0.1.0"
-description = "Soccer playstyle similarity engine — lookup a player-season and find stylistic analogues."
+description = "Soccer playstyle similarity — look up a player-season and rank stylistic analogues. https://pipguardiola.com"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "Tumelo Ngono" }]
