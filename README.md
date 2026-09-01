@@ -10,7 +10,7 @@ Canonical example: **Kevin De Bruyne, 2019-20**. Filter by era, league, position
 
 Outfield seasons are z-scored rates, style shares, and possession-adjusted defending (FBref Big 5, 2017-18–2024-25, 900+ minutes). A small JAX encoder (InfoNCE on Poisson resamples of the same season) maps that vector to a 32-d metric. Neighbours are cosine in that space. Keepers stay on PCA-whitened cosine — the learned metric lost there.
 
-Clustering does not retrieve. A 16-style prototype match names the page (deep-lying playmaker, overlapping full-back, sweeper-keeper, …). Feature-group cosine explains why two seasons lined up.
+Clustering does not retrieve. A 16-style prototype match names the page (deep-lying playmaker, overlapping full-back, sweeper-keeper, …), gated by FBref position and a 16% mix floor so a full-back cannot surface as a false nine. Feature-group cosine explains why two seasons lined up.
 
 ## Numbers
 

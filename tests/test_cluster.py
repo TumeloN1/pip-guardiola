@@ -6,6 +6,7 @@ import numpy as np
 
 from kindred.cluster import (
     ARCHETYPE_CATALOG,
+    DISPLAY_THRESHOLD,
     N_ARCHETYPES,
     fit_gmm,
     keeper_archetypes,
@@ -30,9 +31,15 @@ def test_catalog_covers_core_styles():
     ):
         assert needed in names
     for spec in ARCHETYPE_CATALOG:
+        assert spec["positions"], spec["name"]
+        assert set(spec["positions"]) <= {"DF", "MF", "FW"}
         assert not any("_p90" in spec["name"] or spec["name"].islower() and "_" in spec["name"] for _ in [0])
         for feat in spec["high"] + spec["low"]:
             assert feat in OUTFIELD_FEATURES, feat
+    false_nine = next(s for s in ARCHETYPE_CATALOG if s["name"] == "False nine")
+    assert false_nine["positions"] == ["FW"]
+    overlapping = next(s for s in ARCHETYPE_CATALOG if s["name"] == "Overlapping full-back")
+    assert overlapping["positions"] == ["DF"]
 
 
 def test_fit_assigns_unique_catalog_names():
@@ -51,15 +58,97 @@ def test_fit_assigns_unique_catalog_names():
     assert set(fit.labels) <= {spec["name"] for spec in ARCHETYPE_CATALOG}
 
 
+def _allowed_names(pos: str) -> set[str]:
+    tokens = {p.strip() for p in pos.split(",") if p.strip()}
+    return {spec["name"] for spec in ARCHETYPE_CATALOG if tokens.intersection(spec["positions"])}
+
+
+def test_fullback_vector_cannot_be_false_nine():
+    proto_idx = {n: i for i, n in enumerate(OUTFIELD_FEATURES)}
+    x = np.zeros(len(OUTFIELD_FEATURES))
+    false_nine = next(s for s in ARCHETYPE_CATALOG if s["name"] == "False nine")
+    for name in false_nine["high"]:
+        x[proto_idx[name]] = 2.4
+    rows = top_archetypes(None, x, pos="DF", primary_pos="DF")
+    names = {row["name"] for row in rows}
+    assert "False nine" not in names
+    assert "Poacher" not in names
+    assert "Wide creator" not in names
+    assert names <= _allowed_names("DF")
+    assert all(row["weight"] >= DISPLAY_THRESHOLD for row in rows)
+
+
+def test_hybrid_df_mf_keeps_both_families():
+    proto_idx = {n: i for i, n in enumerate(OUTFIELD_FEATURES)}
+    x = np.zeros(len(OUTFIELD_FEATURES))
+    for name in ("prg_c_p90", "padj_tkl", "touch_att3_share", "xag_p90", "kp_p90"):
+        x[proto_idx[name]] = 1.8
+    rows = top_archetypes(None, x, pos="DF,MF", primary_pos="DF")
+    names = {row["name"] for row in rows}
+    assert names <= _allowed_names("DF,MF")
+    assert "False nine" not in names
+    assert names & {
+        "Wing-back",
+        "Overlapping full-back",
+        "Box-to-box midfielder",
+        "Destroyer",
+        "Wide creator",
+        "Inverted full-back",
+    }
+
+
 def test_kdb_is_a_creator():
     from kindred.similarity import build_index
     import pandas as pd
     from kindred.paths import FEATURES_PARQUET
 
     index = build_index(pd.read_parquet(FEATURES_PARQUET), "outfield")
-    x = index.features[index.id_to_row()["e46012d4-2020"]]
-    names = {row["name"] for row in top_archetypes(load_gmm(), x)}
-    assert names & {"Wide creator", "False nine", "Deep-lying playmaker", "Box-to-box midfielder"}
+    i = index.id_to_row()["e46012d4-2020"]
+    rows = top_archetypes(
+        load_gmm(),
+        index.features[i],
+        pos=str(index.positions[i]),
+        primary_pos=str(index.primary_pos[i]),
+    )
+    names = {row["name"] for row in rows}
+    assert names <= _allowed_names(str(index.positions[i]))
+    assert names & {
+        "Wide creator",
+        "Deep-lying playmaker",
+        "Box-to-box midfielder",
+        "Shadow striker",
+    }
+    assert "False nine" not in names
+    assert all(row["weight"] >= DISPLAY_THRESHOLD for row in rows)
+
+
+def test_taa_is_not_a_false_nine():
+    from kindred.similarity import build_index
+    import pandas as pd
+    from kindred.paths import FEATURES_PARQUET
+
+    index = build_index(pd.read_parquet(FEATURES_PARQUET), "outfield")
+    i = index.id_to_row()["cd1acf9d-2020"]
+    rows = top_archetypes(
+        load_gmm(),
+        index.features[i],
+        pos=str(index.positions[i]),
+        primary_pos=str(index.primary_pos[i]),
+    )
+    names = {row["name"] for row in rows}
+    assert str(index.positions[i]) == "DF"
+    assert names <= _allowed_names("DF")
+    assert "False nine" not in names
+    assert "Poacher" not in names
+    assert "Wide creator" not in names
+    assert names & {
+        "Overlapping full-back",
+        "Inverted full-back",
+        "Wing-back",
+        "Ball-playing centre-back",
+        "Destroyer",
+    }
+    assert all(row["weight"] >= DISPLAY_THRESHOLD for row in rows)
 
 
 def test_keeper_archetypes_are_named():

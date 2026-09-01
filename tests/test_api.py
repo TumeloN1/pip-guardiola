@@ -48,6 +48,7 @@ def test_health_and_kdb_similar():
         assert "p90" not in row["name"].lower()
         assert "blurb" in row
         assert row["blurb"]
+        assert row["weight"] >= 0.16
 
     headline = profile.json()["headline"]
     labels = {row["label"] for row in headline}
@@ -61,3 +62,14 @@ def test_health_and_kdb_similar():
     search = client.get("/api/players", params={"q": "de bruyne"})
     ids = [row["id"] for row in search.json()]
     assert ids and ids[0].startswith("e46012d4-")
+
+    taa = client.get("/api/players/cd1acf9d-2020/profile")
+    assert taa.status_code == 200
+    taa_arch = taa.json()["archetypes"]
+    assert taa_arch
+    taa_names = {row["name"] for row in taa_arch}
+    assert "False nine" not in taa_names
+    assert "Poacher" not in taa_names
+    assert "Wide creator" not in taa_names
+    for row in taa_arch:
+        assert row["weight"] >= 0.16
