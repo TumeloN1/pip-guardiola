@@ -28,6 +28,7 @@ export type SimilarRow = {
   comp: string;
   pos: string;
   minutes: number;
+  fbref_id?: string;
   similarity: number;
   groups: GroupScore[];
 };
@@ -50,11 +51,17 @@ export type Archetype = {
   blurb?: string;
 };
 
+export type HeadlineStat = {
+  label: string;
+  value: string;
+};
+
 export type ProfileResponse = {
   player: PlayerHit;
   percentiles: Record<string, number | null>;
   radar: RadarPoint[];
   archetypes: Archetype[];
+  headline?: HeadlineStat[];
   groups: string[];
 };
 

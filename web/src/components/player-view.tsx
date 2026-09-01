@@ -2,29 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
+import { PlayerProfileSkeleton } from "@/components/player-profile-skeleton";
 import { RadarCard } from "@/components/radar-card";
 import { FiltersCard, type FilterState } from "@/components/filters-card";
-import { WeightSliders } from "@/components/weight-sliders";
 import { SimilarTable } from "@/components/similar-table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getPlayer, getProfile, getSimilar } from "@/lib/api";
-import type { PlayerHit, ProfileResponse, SimilarResponse, SimilarRow } from "@/lib/types";
-
-const OUTFIELD_WEIGHTS = {
-  finishing: 1,
-  creation: 1,
-  passing: 1,
-  carrying: 1,
-  occupation: 1,
-  defending: 1,
-  duels: 1,
-};
-
-const GK_WEIGHTS = {
-  shotstopping: 1,
-  distribution: 1,
-  sweeping: 1,
-};
+import type { HeadlineStat, PlayerHit, ProfileResponse, SimilarResponse, SimilarRow } from "@/lib/types";
 
 const DEFAULT_FILTERS: FilterState = {
   eraStart: 2018,
@@ -60,9 +45,6 @@ export function PlayerView({
       ? { ...DEFAULT_FILTERS, positions: ["GK"], comps: [] }
       : DEFAULT_FILTERS,
   );
-  const [weights, setWeights] = useState<Record<string, number>>(
-    initialPlayer?.role === "keeper" ? GK_WEIGHTS : OUTFIELD_WEIGHTS,
-  );
 
   useEffect(() => {
     setPlayer(initialPlayer);
@@ -73,7 +55,6 @@ export function PlayerView({
     setLoadingPlayer(!initialPlayer && !initialError);
     setLoadingRank(!initialSimilar);
     if (initialPlayer) {
-      setWeights(initialPlayer.role === "keeper" ? GK_WEIGHTS : OUTFIELD_WEIGHTS);
       setFilters(
         initialPlayer.role === "keeper"
           ? { ...DEFAULT_FILTERS, positions: ["GK"], comps: [] }
@@ -92,7 +73,6 @@ export function PlayerView({
         if (cancelled) return;
         setPlayer(p);
         setProfile(prof);
-        setWeights(p.role === "keeper" ? GK_WEIGHTS : OUTFIELD_WEIGHTS);
         if (p.role === "keeper") {
           setFilters((f) => ({ ...f, positions: ["GK"], comps: [] }));
         }
@@ -108,10 +88,7 @@ export function PlayerView({
     };
   }, [id, initialPlayer]);
 
-  const similarKey = useMemo(
-    () => JSON.stringify({ id, filters, weights }),
-    [id, filters, weights],
-  );
+  const similarKey = useMemo(() => JSON.stringify({ id, filters }), [id, filters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +104,7 @@ export function PlayerView({
           comps: filters.comps,
           positions: filters.positions,
           minMinutes: filters.minMinutes,
-          weights,
+          k: 40,
         },
         controller.signal,
       )
@@ -138,21 +115,30 @@ export function PlayerView({
         })
         .catch((err: unknown) => {
           if (cancelled || (err instanceof DOMException && err.name === "AbortError")) return;
-          if (!cancelled) {
-            setRankError(err instanceof Error ? err.message : "Ranking failed");
-            setRows([]);
-          }
+          setRankError(err instanceof Error ? err.message : "Ranking failed");
+          setRows([]);
         })
         .finally(() => {
           if (!cancelled) setLoadingRank(false);
         });
-    }, 220);
+    }, 180);
     return () => {
       cancelled = true;
       controller.abort();
       window.clearTimeout(handle);
     };
-  }, [similarKey, id, filters, weights]);
+  }, [similarKey, id, filters]);
+
+  if (loadingPlayer && !player) {
+    return (
+      <div className="flex min-h-full flex-1 flex-col">
+        <SiteHeader />
+        <PlayerProfileSkeleton />
+      </div>
+    );
+  }
+
+  const headline: HeadlineStat[] = profile?.headline ?? [];
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -171,7 +157,7 @@ export function PlayerView({
               Player profile
             </p>
             <h1 className="mt-1 font-heading text-4xl uppercase tracking-tight text-primary sm:text-5xl">
-              {player?.player ?? (loadingPlayer ? "Loading…" : "Unknown player")}
+              {player?.player ?? "Unknown player"}
             </h1>
             {player && (
               <p className="mt-1 text-muted-foreground">
@@ -187,6 +173,27 @@ export function PlayerView({
             </div>
           )}
         </div>
+
+        {loadingPlayer && headline.length === 0 ? (
+          <div className="mb-8 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 rounded-sm" />
+            ))}
+          </div>
+        ) : headline.length > 0 ? (
+          <div className="mb-8 grid grid-cols-2 gap-px overflow-hidden border border-border bg-border sm:grid-cols-4 lg:grid-cols-7">
+            {headline.map((stat) => (
+              <div key={stat.label} className="bg-card px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  {stat.label}
+                </p>
+                <p className="mt-1 font-heading text-2xl tabular-nums tracking-tight text-primary">
+                  {stat.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {profile?.archetypes && profile.archetypes.length > 0 && (
           <div className="mb-8">
@@ -229,7 +236,6 @@ export function PlayerView({
           </div>
           <div className="space-y-6">
             <FiltersCard value={filters} onChange={setFilters} />
-            <WeightSliders weights={weights} onChange={setWeights} />
           </div>
         </div>
       </main>

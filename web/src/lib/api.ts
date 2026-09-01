@@ -39,7 +39,7 @@ export type SimilarParams = {
   positions: string[];
   minMinutes: number;
   k?: number;
-  weights: Record<string, number>;
+  weights?: Record<string, number>;
 };
 
 export function getSimilar(
@@ -55,7 +55,7 @@ export function getSimilar(
   });
   if (params.comps.length) qs.set("comps", params.comps.join(","));
   if (params.positions.length) qs.set("positions", params.positions.join(","));
-  if (Object.keys(params.weights).length) {
+  if (params.weights && Object.keys(params.weights).length) {
     qs.set("weights", JSON.stringify(params.weights));
   }
   return getJson(`/api/players/${id}/similar?${qs}`, signal);

@@ -23,8 +23,7 @@ export default function HomePage() {
           </h1>
           <p className="mt-5 max-w-xl text-base text-white/75 sm:text-lg">
             Look up a player-season and rank stylistic analogues — not teammates, not output clones.
-            Filter by era, league, position, and minutes. Re-weight finishing, carrying, or defending
-            live.
+            Filter by era, league, position, and minutes.
           </p>
         </div>
       </section>
