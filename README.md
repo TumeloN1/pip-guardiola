@@ -59,13 +59,19 @@ sudo docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d
 
 Caddy issues a Let’s Encrypt cert automatically when `SITE_ADDRESS` is a hostname. Keep it at `:80` until DNS actually points here or issuance will fail.
 
-**Updates.**
+**Updates.** Pushes to `main` rebuild the box when GitHub Actions can SSH in. Add these repository secrets:
+
+- `LIGHTSAIL_HOST` — static IP or `pipguardiola.com`
+- `LIGHTSAIL_USER` — usually `ubuntu`
+- `LIGHTSAIL_SSH_KEY` — private key whose public half is in `ubuntu`'s `authorized_keys`
+
+Until those exist, update by hand:
 
 ```bash
-cd /opt/pip-guardiola
-git pull
-sudo docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d --build
+sudo /opt/pip-guardiola/deploy/update.sh
 ```
+
+That script is `git pull --ff-only` then `docker compose … up -d --build`. The workflow runs the same commands over SSH.
 
 Local `docker compose up` (no overlay) still binds 43917/8317 for development. The Lightsail overlay is what you run on the VPS.
 
@@ -137,7 +143,7 @@ Clustering is the wrong primitive for retrieval. A cluster label is a coarse buc
 
 **Model** (`src/kindred/model.py`): Flax NNX MLP `43 → 128 → 64 → 32`, L2-normalized. InfoNCE positives are two Poisson resamples of the same player-season (counting stats are approximately Poisson). Consecutive-season pairs are held out of training so adjacent-season MRR is honest.
 
-**Archetypes** (`src/kindred/cluster.py`): JIT diagonal GMM over the 32-d space, K chosen by BIC, named from the original z-features of each component's members. Soft memberships show up as bars on the player page. Gradient-based group scores explain *why* two players matched.
+**Archetypes** (`src/kindred/cluster.py`): 16-component GMM on the z-scored outfield features, then Hungarian-matched onto named prototypes a supporter would recognise (deep-lying playmaker, destroyer, inside forward, overlapping full-back, …). Soft memberships show up as cards on the player page. Feature-group cosine explains *why* two players matched — not a JAX gradient per neighbour, which was serialising the API.
 
 ## Layout
 
@@ -148,9 +154,11 @@ src/kindred/similarity.py  cosine / PCA baselines, filters
 src/kindred/evaluate.py    adjacent-season MRR, face validity
 src/kindred/model.py       Flax NNX encoder + InfoNCE
 src/kindred/train.py       CLI
-src/kindred/cluster.py     GMM + explanations
+src/kindred/cluster.py     named-style GMM
 src/kindred/api.py         FastAPI on 8317
 web/                       Next.js on 43917
+deploy/                    Lightsail first-boot + update.sh
+.github/workflows/         SSH deploy on push to main
 artifacts/                 parquet, encoder, eval.json, GMM
 ```
 

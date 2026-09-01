@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { RadarCard } from "@/components/radar-card";
 import { FiltersCard, type FilterState } from "@/components/filters-card";
@@ -50,7 +50,7 @@ export function PlayerView({
   const [player, setPlayer] = useState<PlayerHit | null>(initialPlayer);
   const [profile, setProfile] = useState<ProfileResponse | null>(initialProfile);
   const [rows, setRows] = useState<SimilarRow[] | null>(initialSimilar?.results ?? null);
-  const [metric, setMetric] = useState(initialSimilar?.metric ?? "zscore_cosine");
+  const [metric, setMetric] = useState(initialSimilar?.metric ?? "learned");
   const [loadError, setLoadError] = useState<string | null>(initialError);
   const [rankError, setRankError] = useState<string | null>(null);
   const [loadingPlayer, setLoadingPlayer] = useState(!initialPlayer && !initialError);
@@ -63,7 +63,24 @@ export function PlayerView({
   const [weights, setWeights] = useState<Record<string, number>>(
     initialPlayer?.role === "keeper" ? GK_WEIGHTS : OUTFIELD_WEIGHTS,
   );
-  const skipFirstSimilar = useRef(Boolean(initialSimilar));
+
+  useEffect(() => {
+    setPlayer(initialPlayer);
+    setProfile(initialProfile);
+    setLoadError(initialError);
+    setRows(initialSimilar?.results ?? null);
+    setMetric(initialSimilar?.metric ?? "learned");
+    setLoadingPlayer(!initialPlayer && !initialError);
+    setLoadingRank(!initialSimilar);
+    if (initialPlayer) {
+      setWeights(initialPlayer.role === "keeper" ? GK_WEIGHTS : OUTFIELD_WEIGHTS);
+      setFilters(
+        initialPlayer.role === "keeper"
+          ? { ...DEFAULT_FILTERS, positions: ["GK"], comps: [] }
+          : DEFAULT_FILTERS,
+      );
+    }
+  }, [id, initialPlayer, initialProfile, initialSimilar, initialError]);
 
   useEffect(() => {
     if (initialPlayer && initialPlayer.id === id) return;
@@ -97,54 +114,63 @@ export function PlayerView({
   );
 
   useEffect(() => {
-    if (skipFirstSimilar.current) {
-      skipFirstSimilar.current = false;
-      return;
-    }
     let cancelled = false;
+    const controller = new AbortController();
     setLoadingRank(true);
     setRankError(null);
-    getSimilar(id, {
-      eraStart: filters.eraStart,
-      eraEnd: filters.eraEnd,
-      comps: filters.comps,
-      positions: filters.positions,
-      minMinutes: filters.minMinutes,
-      weights,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setRows(res.results);
-        setMetric(res.metric);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setRankError(err instanceof Error ? err.message : "Ranking failed");
-          setRows([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRank(false);
-      });
+    const handle = window.setTimeout(() => {
+      getSimilar(
+        id,
+        {
+          eraStart: filters.eraStart,
+          eraEnd: filters.eraEnd,
+          comps: filters.comps,
+          positions: filters.positions,
+          minMinutes: filters.minMinutes,
+          weights,
+        },
+        controller.signal,
+      )
+        .then((res) => {
+          if (cancelled) return;
+          setRows(res.results);
+          setMetric(res.metric);
+        })
+        .catch((err: unknown) => {
+          if (cancelled || (err instanceof DOMException && err.name === "AbortError")) return;
+          if (!cancelled) {
+            setRankError(err instanceof Error ? err.message : "Ranking failed");
+            setRows([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingRank(false);
+        });
+    }, 220);
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(handle);
     };
   }, [similarKey, id, filters, weights]);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <SiteHeader compact />
+      <SiteHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">
         {loadError && (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm">
+          <div className="mb-6 border border-destructive/40 bg-destructive/10 p-4 text-sm">
             {loadError.includes("unknown")
               ? "That player-season is not in the index. It may be below 900 minutes or missing advanced stats."
               : loadError}
           </div>
         )}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-6 flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl sm:text-4xl" style={{ fontFamily: "var(--font-serif)" }}>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Player profile
+            </p>
+            <h1 className="mt-1 font-heading text-4xl uppercase tracking-tight text-primary sm:text-5xl">
               {player?.player ?? (loadingPlayer ? "Loading…" : "Unknown player")}
             </h1>
             {player && (
@@ -163,22 +189,31 @@ export function PlayerView({
         </div>
 
         {profile?.archetypes && profile.archetypes.length > 0 && (
-          <div className="mb-6 space-y-2">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Archetypes</p>
-            {profile.archetypes.map((a) => (
-              <div key={a.name} className="flex items-center gap-3">
-                <span className="w-40 truncate text-sm">{a.name}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full bg-primary"
-                    style={{ width: `${Math.round(a.weight * 100)}%` }}
-                  />
+          <div className="mb-8">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Playing styles
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {profile.archetypes.map((a) => (
+                <div key={a.name} className="border border-border bg-card p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h2 className="font-heading text-lg uppercase leading-tight tracking-tight text-primary">
+                      {a.name}
+                    </h2>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-[#FF2882]">
+                      {Math.round(a.weight * 100)}%
+                    </span>
+                  </div>
+                  {a.blurb && <p className="mt-2 text-sm leading-snug text-muted-foreground">{a.blurb}</p>}
+                  <div className="mt-3 h-1.5 overflow-hidden bg-muted">
+                    <div
+                      className="h-full bg-[#00FF85]"
+                      style={{ width: `${Math.round(a.weight * 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">
-                  {Math.round(a.weight * 100)}%
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 

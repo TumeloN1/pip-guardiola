@@ -32,3 +32,22 @@ def test_health_and_kdb_similar():
 
     missing = client.get("/api/players/not-a-real-id/similar")
     assert missing.status_code == 404
+
+    gone = client.get("/api/players/not-a-real-id")
+    assert gone.status_code == 404
+
+    profile = client.get("/api/players/e46012d4-2020/profile")
+    assert profile.status_code == 200
+    arch = profile.json()["archetypes"]
+    assert arch
+    for row in arch:
+        assert " " in row["name"] or row["name"][0].isupper()
+        assert "_" not in row["name"]
+        assert "/" not in row["name"]
+        assert "p90" not in row["name"].lower()
+        assert "blurb" in row
+        assert row["blurb"]
+
+    search = client.get("/api/players", params={"q": "de bruyne"})
+    ids = [row["id"] for row in search.json()]
+    assert ids and ids[0].startswith("e46012d4-")

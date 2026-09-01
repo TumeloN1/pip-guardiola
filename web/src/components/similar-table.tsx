@@ -62,8 +62,8 @@ export function SimilarTable({
         )}
         {!loading && rows && rows.length > 0 && (
           <Table>
-            <TableHeader>
-              <TableRow>
+            <TableHeader className="bg-primary [&_th]:text-primary-foreground">
+              <TableRow className="border-primary hover:bg-primary">
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Player</TableHead>
                 <TableHead className="hidden sm:table-cell">Season</TableHead>
@@ -77,7 +77,7 @@ export function SimilarTable({
                 <TableRow key={`${row.player_id}-${row.rank}`}>
                   <TableCell className="tabular-nums text-muted-foreground">{row.rank}</TableCell>
                   <TableCell>
-                    <Link href={`/player/${row.player_id}`} className="font-medium hover:text-primary">
+                    <Link href={`/player/${row.player_id}`} className="font-semibold text-primary hover:text-[#FF2882]">
                       {row.player}
                     </Link>
                     <div className="text-xs text-muted-foreground sm:hidden">

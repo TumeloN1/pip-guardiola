@@ -1,235 +1,343 @@
-"""JAX GMM over the learned embedding space, plus gradient group explanations."""
+"""Named football-style archetypes over outfield z-features.
+
+Retrieval stays contrastive / cosine. These labels are a fan-facing overlay.
+
+We fit a 16-component diagonal GMM on the already z-scored outfield matrix,
+then assign each component to a curated prototype (Hungarian matching) so the
+names stay stable and readable — never raw FBref codes like cpa_p90.
+"""
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
-import jax
-import jax.numpy as jnp
 import numpy as np
+from scipy.optimize import linear_sum_assignment
+from sklearn.mixture import GaussianMixture
 
-from kindred.model import EncoderBundle
-from kindred.paths import EMBEDDINGS_NPZ, GMM_NPZ, PROJECTION_NPZ
-from kindred.similarity import MatrixIndex, group_scale_vector
+from kindred.features import FEATURE_GROUPS, GK_FEATURES, OUTFIELD_FEATURES
+from kindred.paths import EMBEDDINGS_NPZ, FEATURES_PARQUET, GMM_NPZ, PROJECTION_NPZ
 
-ARCHETYPE_SEEDS = [
-    "progressive creator",
-    "box-to-box engine",
-    "wide carrier",
-    "penalty-box striker",
-    "target forward",
-    "ball-playing centre-back",
-    "aggressive full-back",
-    "destroyer",
-    "deep-lying metronome",
-    "pressing forward",
+N_ARCHETYPES = 16
+
+# Prototypes: high / low z-score features a season of that style should show.
+ARCHETYPE_CATALOG: list[dict] = [
+    {
+        "name": "Deep-lying playmaker",
+        "blurb": "Dictates from deep: progressive passes, switches, and key balls without hunting goals.",
+        "high": ["prg_p_p90", "pass_long_share", "kp_p90", "pass_att_p90", "prg_pass_share"],
+        "low": ["npxg_p90", "touch_att_pen_share", "gls_p90"],
+    },
+    {
+        "name": "Box-to-box midfielder",
+        "blurb": "Covers both boxes: progressive carries, tackles, and a share of chance creation.",
+        "high": ["prg_c_p90", "padj_tkl", "xag_p90", "carries_p90", "touch_mid3_share"],
+        "low": ["touch_def_pen_share"],
+    },
+    {
+        "name": "Destroyer",
+        "blurb": "Wins the ball and stays compact: tackles, interceptions, blocks, clearances.",
+        "high": ["padj_tkl", "padj_int", "padj_blocks", "padj_clr", "tkl_def_share"],
+        "low": ["npxg_p90", "prg_c_p90", "touch_att_pen_share"],
+    },
+    {
+        "name": "Ball-playing centre-back",
+        "blurb": "Starts attacks from the back: progressive passing and switches, not just clearances.",
+        "high": ["prg_p_p90", "pass_long_share", "pass_att_p90", "carries_p90", "touch_def3_share"],
+        "low": ["npxg_p90", "touch_att_pen_share"],
+    },
+    {
+        "name": "Stopper",
+        "blurb": "Old-school centre-back: aerials, clearances, and blocks in the defensive box.",
+        "high": ["padj_clr", "aerial_p90", "padj_blocks", "touch_def_pen_share", "aerial_win_share"],
+        "low": ["prg_p_p90", "prg_c_p90"],
+    },
+    {
+        "name": "Overlapping full-back",
+        "blurb": "Attacks the flank: progressive carries, crosses, and touches in the attacking third.",
+        "high": ["prg_c_p90", "touch_att3_share", "carries_p90", "prg_r_p90", "tkl_att_share"],
+        "low": ["npxg_p90"],
+    },
+    {
+        "name": "Inverted full-back",
+        "blurb": "Tucks inside to pass: progressive passing volume over crossing and wide carries.",
+        "high": ["prg_p_p90", "pass_att_p90", "touch_mid3_share", "carries_p90", "pass_short_share"],
+        "low": ["take_att_p90", "touch_att_pen_share"],
+    },
+    {
+        "name": "Wing-back",
+        "blurb": "High and wide all game: progressive receptions, attacking-third volume, and defensive work on the flank.",
+        "high": ["prg_r_p90", "padj_tkl", "touch_att3_share", "prg_c_p90", "tkl_att_share"],
+        "low": ["touch_def_pen_share"],
+    },
+    {
+        "name": "Wide creator",
+        "blurb": "Supplies from the wing: key passes, xAG, and progressive receptions.",
+        "high": ["kp_p90", "xag_p90", "ppa_p90", "prg_r_p90", "ast_p90"],
+        "low": ["padj_clr"],
+    },
+    {
+        "name": "Inside forward",
+        "blurb": "Cuts inside to finish: xG, shots, and penalty-box touches rather than hold-up play.",
+        "high": ["npxg_p90", "sh_p90", "touch_att_pen_share", "prg_c_p90", "cpa_p90"],
+        "low": ["aerial_p90", "padj_tkl"],
+    },
+    {
+        "name": "Winger",
+        "blurb": "Stretches the pitch: take-ons, progressive carries, and attacking-third volume.",
+        "high": ["take_att_p90", "prg_c_p90", "touch_att3_share", "carries_p90", "takeons_per_touch"],
+        "low": ["padj_clr"],
+    },
+    {
+        "name": "Target striker",
+        "blurb": "Holds the ball up and wins aerials in the box; finishing volume over chance creation.",
+        "high": ["aerial_p90", "touch_att_pen_share", "npxg_p90", "sh_p90", "aerial_win_share"],
+        "low": ["prg_p_p90", "take_att_p90"],
+    },
+    {
+        "name": "Poacher",
+        "blurb": "Lives in the six-yard box: shots and xG, almost no defensive or build-up work.",
+        "high": ["npxg_p90", "sh_p90", "touch_att_pen_share", "gls_p90", "sot_p90"],
+        "low": ["padj_tkl", "prg_p_p90", "touch_mid3_share"],
+    },
+    {
+        "name": "False nine",
+        "blurb": "Drops off the front to combine: key passes and xAG with some finishing threat.",
+        "high": ["kp_p90", "xag_p90", "ppa_p90", "prg_r_p90", "pass_att_p90"],
+        "low": ["padj_clr", "aerial_p90"],
+    },
+    {
+        "name": "Shadow striker",
+        "blurb": "Arrives from midfield: penalty-box touches, shots, and progressive receptions.",
+        "high": ["touch_att_pen_share", "sh_p90", "prg_r_p90", "npxg_p90", "cpa_p90"],
+        "low": ["padj_clr", "padj_blocks"],
+    },
+    {
+        "name": "Pressing forward",
+        "blurb": "Leads the press from the front: tackles and interceptions plus attacking-third work.",
+        "high": ["padj_tkl", "padj_int", "touch_att3_share", "sh_p90", "tkl_att_share"],
+        "low": ["padj_clr"],
+    },
+]
+
+KEEPER_CATALOG: list[dict] = [
+    {
+        "name": "Sweeper-keeper",
+        "blurb": "Steps out of the box: sweeper actions and a high starting position.",
+        "high": ["gk_opa_p90", "gk_sweeper_avg_dist"],
+        "low": ["gk_launch_pct"],
+    },
+    {
+        "name": "Shot-stopper",
+        "blurb": "Lives on the line: save percentage and PSxG overperformance.",
+        "high": ["gk_save_share", "gk_psxg_plus_minus_p90", "gk_pka_save_share"],
+        "low": ["gk_opa_p90"],
+    },
+    {
+        "name": "Distributor",
+        "blurb": "Starts attacks with the feet: long launches and long goal-kicks.",
+        "high": ["gk_launch_pct", "gk_avg_pass_len", "gk_goal_kick_launch_pct"],
+        "low": ["gk_throws_share"],
+    },
 ]
 
 
-def _log_gauss(x: jnp.ndarray, mean: jnp.ndarray, var: jnp.ndarray) -> jnp.ndarray:
-    # x: (n, d), mean/var: (k, d) → (n, k)
-    x = x[:, None, :]
-    mean = mean[None, :, :]
-    var = jnp.clip(var[None, :, :], 1e-6)
-    return -0.5 * jnp.sum(jnp.log(2 * jnp.pi * var) + (x - mean) ** 2 / var, axis=-1)
+@dataclass(frozen=True)
+class ClusterFit:
+    means: np.ndarray
+    covariances: np.ndarray
+    weights: np.ndarray
+    labels: list[str]
+    blurbs: list[str]
+    n_components: int
+    feature_names: list[str]
 
 
-def gmm_em(
-    x: jnp.ndarray,
-    k: int,
-    *,
-    key: jax.Array,
-    n_iter: int = 40,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, float]:
-    n, d = x.shape
-    key, sub = jax.random.split(key)
-    idx = jax.random.choice(sub, n, (k,), replace=False)
-    means = x[idx]
-    var = jnp.var(x, axis=0) + 1e-3
-    vars_ = jnp.tile(var[None, :], (k, 1))
-    weights = jnp.ones((k,)) / k
-
-    def body(state, _):
-        means, vars_, weights = state
-        log_resp = _log_gauss(x, means, vars_) + jnp.log(weights)[None, :]
-        log_resp = log_resp - jax.nn.logsumexp(log_resp, axis=1, keepdims=True)
-        resp = jnp.exp(log_resp)
-        nk = resp.sum(axis=0) + 1e-8
-        weights = nk / n
-        means = (resp.T @ x) / nk[:, None]
-        diff = x[:, None, :] - means[None, :, :]
-        vars_ = jnp.sum(resp[:, :, None] * diff * diff, axis=0) / nk[:, None] + 1e-4
-        return (means, vars_, weights), None
-
-    (means, vars_, weights), _ = jax.lax.scan(body, (means, vars_, weights), None, length=n_iter)
-    log_resp = _log_gauss(x, means, vars_) + jnp.log(weights)[None, :]
-    ll = float(jax.nn.logsumexp(log_resp, axis=1).mean())
-    return means, vars_, weights, ll
+def _feat_index(names: list[str]) -> dict[str, int]:
+    return {n: i for i, n in enumerate(names)}
 
 
-def bic_score(n: int, d: int, k: int, mean_ll: float) -> float:
-    n_params = k * (d + d + 1) - 1
-    loglik = mean_ll * n
-    return n_params * np.log(n) - 2 * loglik
+def _prototype_vectors(names: list[str], catalog: list[dict]) -> np.ndarray:
+    idx = _feat_index(names)
+    proto = np.zeros((len(catalog), len(names)), dtype=np.float64)
+    for i, spec in enumerate(catalog):
+        for name in spec["high"]:
+            if name in idx:
+                proto[i, idx[name]] = 1.35
+        for name in spec["low"]:
+            if name in idx:
+                proto[i, idx[name]] = -0.85
+    return proto
 
 
-PRETTY = {
-    "npxg_p90": "npxG/90",
-    "xag_p90": "xAG/90",
-    "xa_p90": "xA/90",
-    "gls_p90": "goals/90",
-    "ast_p90": "assists/90",
-    "sh_p90": "shots/90",
-    "kp_p90": "key passes/90",
-    "prg_p_p90": "progressive passes",
-    "prg_c_p90": "progressive carries",
-    "prg_r_p90": "progressive receptions",
-    "take_att_p90": "take-ons",
-    "padj_tkl": "PAdj tackles",
-    "padj_int": "PAdj interceptions",
-    "padj_blocks": "PAdj blocks",
-    "padj_clr": "PAdj clearances",
-    "padj_recov": "PAdj recoveries",
-    "aerial_p90": "aerials",
-    "touch_att3_share": "attacking-third touches",
-    "touch_def3_share": "defensive-third touches",
-    "touch_mid3_share": "midfield touches",
-    "tkl_att_share": "high tackles",
-    "tkl_def_share": "low-block tackles",
-    "pass_long_share": "long passing",
-    "pass_short_share": "short passing",
-    "dist_per_carry": "carry distance",
-    "pass_final_third_p90": "final-third passes",
-    "pass_med_share": "medium passing",
-    "shot_dist": "shot distance",
-    "fls_p90": "fouls",
-    "touch_att_pen_share": "box touches",
-    "touch_def_pen_share": "defensive-box touches",
-    "ppa_p90": "passes into the box",
-    "sot_p90": "shots on target",
-    "takeons_per_touch": "take-ons per touch",
-    "prg_pass_share": "progressive pass share",
-    "cpa_p90": "carries into the box",
-    "dis_p90": "dispossessed",
-}
+def _assign_catalog(means: np.ndarray, names: list[str]) -> tuple[list[str], list[str]]:
+    proto = _prototype_vectors(names, ARCHETYPE_CATALOG)
+    k = means.shape[0]
+    cost = np.zeros((k, len(ARCHETYPE_CATALOG)), dtype=np.float64)
+    for i in range(k):
+        for j in range(len(ARCHETYPE_CATALOG)):
+            cost[i, j] = np.linalg.norm(means[i] - proto[j])
+    row_ind, col_ind = linear_sum_assignment(cost)
+    labels = ["Unlabelled style"] * k
+    blurbs = [""] * k
+    for r, c in zip(row_ind, col_ind):
+        labels[int(r)] = ARCHETYPE_CATALOG[int(c)]["name"]
+        blurbs[int(r)] = ARCHETYPE_CATALOG[int(c)]["blurb"]
+    return labels, blurbs
 
 
-def label_from_members(
-    resp: np.ndarray,
-    z_features: np.ndarray,
-    feature_names: list[str],
-) -> list[str]:
-    names = []
-    for j in range(resp.shape[1]):
-        top = np.argsort(-resp[:, j])[: min(50, len(resp))]
-        mean = z_features[top].mean(axis=0)
-        order = np.argsort(-mean)
-        a, b = order[0], order[1]
-        names.append(f"{PRETTY.get(feature_names[a], feature_names[a])} · {PRETTY.get(feature_names[b], feature_names[b])}")
-    return names
+def fit_gmm(X: np.ndarray, seed: int = 0, n_components: int = N_ARCHETYPES) -> ClusterFit:
+    Xz = np.nan_to_num(np.asarray(X, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
+    k = min(n_components, len(ARCHETYPE_CATALOG), max(2, Xz.shape[0] // 8))
+    gmm = GaussianMixture(
+        n_components=k,
+        covariance_type="diag",
+        n_init=4,
+        max_iter=200,
+        random_state=seed,
+    )
+    gmm.fit(Xz)
+    labels, blurbs = _assign_catalog(gmm.means_, OUTFIELD_FEATURES)
+    return ClusterFit(
+        means=gmm.means_.astype(np.float32),
+        covariances=gmm.covariances_.astype(np.float32),
+        weights=gmm.weights_.astype(np.float32),
+        labels=labels,
+        blurbs=blurbs,
+        n_components=k,
+        feature_names=list(OUTFIELD_FEATURES),
+    )
 
 
-def fit_gmm(
-    embeddings: np.ndarray,
-    *,
-    ks: tuple[int, ...] = (6, 8, 10, 12),
-    seed: int = 0,
-    feature_names: list[str] | None = None,
-) -> dict:
-    x = jnp.asarray(embeddings)
-    key = jax.random.key(seed)
-    best = None
-    for k in ks:
-        key, sub = jax.random.split(key)
-        means, vars_, weights, ll = gmm_em(x, k, key=sub)
-        bic = bic_score(x.shape[0], x.shape[1], k, ll)
-        rec = {
-            "k": k,
-            "means": np.asarray(means),
-            "vars": np.asarray(vars_),
-            "weights": np.asarray(weights),
-            "ll": ll,
-            "bic": float(bic),
-        }
-        if best is None or rec["bic"] < best["bic"]:
-            best = rec
-    assert best is not None
-    best["names"] = [ARCHETYPE_SEEDS[i % len(ARCHETYPE_SEEDS)] for i in range(best["k"])]
-    log_resp = _log_gauss(x, jnp.asarray(best["means"]), jnp.asarray(best["vars"]))
-    log_resp = log_resp + jnp.log(jnp.asarray(best["weights"]))[None, :]
-    best["resp"] = np.asarray(jax.nn.softmax(log_resp, axis=1))
-    return best
-
-
-def responsibilities_for(gmm: dict, vector: np.ndarray) -> list[dict]:
-    x = jnp.asarray(vector)[None, :]
-    log_resp = _log_gauss(x, jnp.asarray(gmm["means"]), jnp.asarray(gmm["vars"]))
-    log_resp = log_resp + jnp.log(jnp.asarray(gmm["weights"]))[None, :]
-    resp = np.asarray(jax.nn.softmax(log_resp, axis=1)[0])
-    order = np.argsort(-resp)
-    return [{"name": gmm["names"][i], "weight": float(resp[i])} for i in order if resp[i] > 0.02]
-
-
-def load_gmm(path: Path | None = None) -> dict:
-    src = path or GMM_NPZ
-    blob = np.load(src, allow_pickle=True)
-    return {
-        "k": int(blob["k"]),
-        "means": blob["means"],
-        "vars": blob["vars"],
-        "weights": blob["weights"],
-        "names": blob["names"].tolist(),
-        "bic": float(blob["bic"]),
-    }
-
-
-def save_gmm(gmm: dict, path: Path | None = None) -> Path:
+def save_gmm(fit: ClusterFit, path: Path | None = None) -> Path:
     dest = path or GMM_NPZ
+    dest.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         dest,
-        k=np.array(gmm["k"]),
-        means=gmm["means"],
-        vars=gmm["vars"],
-        weights=gmm["weights"],
-        names=np.array(gmm["names"]),
-        bic=np.array(gmm["bic"]),
+        means=fit.means,
+        covariances=fit.covariances,
+        vars=fit.covariances,
+        weights=fit.weights,
+        labels=np.array(fit.labels),
+        names=np.array(fit.labels),
+        blurbs=np.array(fit.blurbs),
+        n_components=np.array(fit.n_components),
+        k=np.array(fit.n_components),
+        feature_names=np.array(fit.feature_names),
+        groups=np.array(list(FEATURE_GROUPS.keys())),
     )
     return dest
 
 
-def gradient_group_explanations(
-    bundle: EncoderBundle,
-    index: MatrixIndex,
-    query_id: str,
-    candidate_id: str,
-    weights: dict[str, float] | None = None,
-) -> list[dict]:
-    lookup = index.id_to_row()
-    scale = group_scale_vector(index, weights)
-    mat = index.features * scale[None, :]
-    q = jnp.asarray(mat[lookup[query_id]])
-    c = jnp.asarray(mat[lookup[candidate_id]])
-    encoder = bundle.encoder
+def load_gmm(path: Path | None = None) -> ClusterFit:
+    src = path or GMM_NPZ
+    z = np.load(src, allow_pickle=True)
+    files = set(z.files)
+    if "n_components" in files:
+        n = int(z["n_components"])
+    else:
+        n = int(z["k"])
+    if "covariances" in files:
+        cov = z["covariances"]
+    else:
+        cov = z["vars"]
+    if "labels" in files:
+        labels = [str(x) for x in z["labels"].tolist()]
+    else:
+        labels = [str(x) for x in z["names"].tolist()]
+    if "blurbs" in files:
+        blurbs = [str(x) for x in z["blurbs"].tolist()]
+    else:
+        blurbs = [""] * n
+    if "feature_names" in files:
+        feature_names = [str(x) for x in z["feature_names"].tolist()]
+    else:
+        feature_names = list(OUTFIELD_FEATURES)
+    return ClusterFit(
+        means=z["means"],
+        covariances=cov,
+        weights=z["weights"],
+        labels=labels,
+        blurbs=blurbs,
+        n_components=n,
+        feature_names=feature_names,
+    )
 
-    def score(xc):
-        zq = encoder(q[None, :])[0]
-        zc = encoder(xc[None, :])[0]
-        return jnp.dot(zq, zc)
 
-    grad = np.asarray(jax.grad(score)(c))
-    c_np = np.asarray(c)
-    name_to_i = {n: i for i, n in enumerate(index.feature_names)}
-    rows = []
-    for group, cols in index.groups.items():
-        idx = np.array([name_to_i[col] for col in cols])
-        rows.append({
-            "group": group,
-            "score": float(np.sum(grad[idx] * c_np[idx])),
-            "weight": float(scale[idx[0]]) if len(idx) else 1.0,
-        })
-    rows.sort(key=lambda r: -r["score"])
-    return rows
+def responsibilities(fit: ClusterFit, x_z: np.ndarray) -> np.ndarray:
+    x = np.nan_to_num(np.asarray(x_z, dtype=np.float64).reshape(-1), nan=0.0)
+    d = fit.means.shape[1]
+    x = x[:d]
+    var = np.asarray(fit.covariances, dtype=np.float64) + 1e-6
+    diff = x[None, :] - np.asarray(fit.means, dtype=np.float64)
+    log_det = np.sum(np.log(var), axis=1)
+    quad = np.sum(diff * diff / var, axis=1)
+    log_p = np.log(np.asarray(fit.weights, dtype=np.float64) + 1e-12) - 0.5 * (
+        log_det + quad + d * np.log(2 * np.pi)
+    )
+    log_p -= log_p.max()
+    p = np.exp(log_p)
+    return p / p.sum()
+
+
+def prototype_scores(x_z: np.ndarray, names: list[str] | None = None) -> np.ndarray:
+    """Cosine match of a z-vector against the named style prototypes.
+
+    GMM posteriors in 40+ dimensions collapse to one-hot; this is what we show.
+    """
+    names = names or list(OUTFIELD_FEATURES)
+    proto = _prototype_vectors(names, ARCHETYPE_CATALOG)
+    x = np.nan_to_num(np.asarray(x_z, dtype=np.float64).reshape(-1)[: len(names)], nan=0.0)
+    xn = x / (np.linalg.norm(x) + 1e-8)
+    pn = proto / (np.linalg.norm(proto, axis=1, keepdims=True) + 1e-8)
+    return pn @ xn
+
+
+def top_archetypes(fit: ClusterFit | None, x_z: np.ndarray, n: int = 3) -> list[dict]:
+    names = list(fit.feature_names) if fit is not None else list(OUTFIELD_FEATURES)
+    scores = prototype_scores(x_z, names)
+    tau = 0.12
+    z = scores / tau
+    z = z - z.max()
+    p = np.exp(z)
+    p = p / p.sum()
+    order = np.argsort(-p)
+    out = []
+    for k in order[:n]:
+        if p[k] < 0.08:
+            continue
+        spec = ARCHETYPE_CATALOG[int(k)]
+        out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": float(p[k])})
+    return out
+
+
+def responsibilities_for(fit: ClusterFit, x_z: np.ndarray) -> list[dict]:
+    return top_archetypes(fit, x_z)
+
+
+def keeper_archetypes(x_z: np.ndarray, n: int = 2) -> list[dict]:
+    idx = _feat_index(GK_FEATURES)
+    x = np.nan_to_num(np.asarray(x_z, dtype=np.float64).reshape(-1), nan=0.0)
+    scores = []
+    for spec in KEEPER_CATALOG:
+        high = [x[idx[name]] for name in spec["high"] if name in idx]
+        low = [x[idx[name]] for name in spec["low"] if name in idx]
+        score = (float(np.mean(high)) if high else 0.0) - 0.35 * (float(np.mean(low)) if low else 0.0)
+        scores.append(score)
+    arr = np.asarray(scores, dtype=np.float64)
+    arr = arr - arr.max()
+    p = np.exp(arr)
+    p = p / p.sum()
+    order = np.argsort(-p)
+    out = []
+    for i in order[:n]:
+        if p[i] < 0.12:
+            continue
+        spec = KEEPER_CATALOG[int(i)]
+        out.append({"name": spec["name"], "blurb": spec["blurb"], "weight": float(p[i])})
+    return out
 
 
 def pca2(embeddings: np.ndarray) -> np.ndarray:
@@ -241,32 +349,30 @@ def pca2(embeddings: np.ndarray) -> np.ndarray:
 def run() -> None:
     import pandas as pd
 
-    from kindred.paths import FEATURES_PARQUET
     from kindred.similarity import build_index
 
-    blob = np.load(EMBEDDINGS_NPZ, allow_pickle=False)
-    gmm = fit_gmm(blob["outfield"])
     features = pd.read_parquet(FEATURES_PARQUET)
     index = build_index(features, "outfield")
-    id_to_i = {str(i): n for n, i in enumerate(index.ids.astype(str))}
-    order = [id_to_i[str(i)] for i in blob["outfield_ids"].astype(str)]
-    gmm["names"] = label_from_members(gmm["resp"], index.features[order], index.feature_names)
-    save_gmm(gmm)
-    xy_out = pca2(blob["outfield"])
-    xy_gk = pca2(blob["keeper"]) if "keeper" in blob.files else np.zeros((0, 2))
-    np.savez(
-        PROJECTION_NPZ,
-        outfield_xy=xy_out,
-        outfield_ids=blob["outfield_ids"],
-        keeper_xy=xy_gk,
-        keeper_ids=blob["keeper_ids"] if "keeper_ids" in blob.files else np.array([], dtype="U"),
-    )
-    print(f"GMM k={gmm['k']} BIC={gmm['bic']:.1f} archetypes={gmm['names']}")
-    print(f"wrote {GMM_NPZ} and {PROJECTION_NPZ}")
+    fit = fit_gmm(index.features)
+    save_gmm(fit)
+
+    if EMBEDDINGS_NPZ.exists():
+        blob = np.load(EMBEDDINGS_NPZ, allow_pickle=False)
+        xy_out = pca2(blob["outfield"])
+        xy_gk = pca2(blob["keeper"]) if "keeper" in blob.files else np.zeros((0, 2))
+        np.savez(
+            PROJECTION_NPZ,
+            outfield_xy=xy_out,
+            outfield_ids=blob["outfield_ids"],
+            keeper_xy=xy_gk,
+            keeper_ids=blob["keeper_ids"] if "keeper_ids" in blob.files else np.array([], dtype="U"),
+        )
+    print(f"GMM k={fit.n_components} archetypes={fit.labels}")
+    print(f"wrote {GMM_NPZ}")
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Fit Kindred GMM archetypes")
+    parser = argparse.ArgumentParser(description="Fit Pip Guardiola named archetypes")
     parser.parse_args(argv)
     run()
 

@@ -51,15 +51,15 @@ export function RadarCard({
       <CardContent className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={data} cx="50%" cy="50%" outerRadius="72%">
-            <PolarGrid stroke="oklch(0.4 0.03 145)" />
+            <PolarGrid stroke="#ddd4e0" />
             <PolarAngleAxis
               dataKey="label"
-              tick={{ fill: "oklch(0.85 0.03 140)", fontSize: 11 }}
+              tick={{ fill: "#37003c", fontSize: 11 }}
             />
             <Radar
               dataKey="value"
-              stroke="oklch(0.84 0.17 132)"
-              fill="oklch(0.84 0.17 132)"
+              stroke="#37003c"
+              fill="#00ff85"
               fillOpacity={0.35}
             />
           </RadarChart>

@@ -1,0 +1,29 @@
+name: Deploy Lightsail
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update pipguardiola.com
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /opt/pip-guardiola
+            git pull --ff-only
+            if docker info >/dev/null 2>&1; then
+              docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d --build
+              docker image prune -f
+            else
+              sudo docker compose -f docker-compose.yml -f docker-compose.lightsail.yml up -d --build
+              sudo docker image prune -f
+            fi

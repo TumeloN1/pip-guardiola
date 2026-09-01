@@ -201,10 +201,21 @@ def search_players(q: str = Query("", min_length=0), limit: int = 20) -> list[di
     needle = q.strip().lower()
     frame = features
     if needle:
-        frame = features.loc[features["player"].str.lower().str.contains(needle, na=False, regex=False)]
-    frame = frame.sort_values(["minutes", "season_end_year"], ascending=False).head(limit)
+        names = features["player"].str.lower()
+        hit = names.str.contains(needle, na=False, regex=False)
+        frame = features.loc[hit].copy()
+        starts = names.loc[frame.index].str.startswith(needle)
+        frame = frame.assign(_prefix=np.where(starts, 0, 1))
+        frame = frame.sort_values(
+            ["_prefix", "minutes", "season_end_year"],
+            ascending=[True, False, False],
+        )
+    else:
+        frame = features.sort_values(["minutes", "season_end_year"], ascending=False)
+    cols = ["player_id", "player", "season", "season_end_year", "squad", "comp", "pos", "minutes", "role"]
+    records = frame[cols].head(limit).to_dict(orient="records")
     rows = []
-    for _, r in frame.iterrows():
+    for r in records:
         rows.append({
             "id": r["player_id"],
             "player": r["player"],
@@ -259,19 +270,15 @@ def get_similar(
         matrix=matrix,
     )
     explained = []
-    st = state()
     for hit in hits:
-        if index.role == "keeper" or st["encoder"] is None:
-            hit["groups"] = group_match_explanations(index, player_id, hit["player_id"], weight_map)
-        else:
-            from kindred.cluster import gradient_group_explanations
-
-            hit["groups"] = gradient_group_explanations(
-                st["encoder"], index, player_id, hit["player_id"], weight_map
-            )
+        hit["groups"] = group_match_explanations(index, player_id, hit["player_id"], weight_map)
         explained.append(hit)
     qi = index.id_to_row()[player_id]
-    return {"query": _row_payload(index, qi), "results": explained, "metric": state()["encoder"] and "learned" or "zscore_cosine"}
+    return {
+        "query": _row_payload(index, qi),
+        "results": explained,
+        "metric": "learned" if state()["encoder"] is not None else "zscore_cosine",
+    }
 
 
 @app.get("/api/players/{player_id}/profile")
@@ -293,13 +300,14 @@ def get_profile(player_id: str) -> dict:
             percentiles[name] = float((finite <= value).mean() * 100.0)
     archetypes = []
     st = state()
-    if st["gmm"] is not None and role == "outfield" and "outfield" in st["embeddings"]:
-        from kindred.cluster import responsibilities_for
+    if role == "outfield" and st["gmm"] is not None:
+        from kindred.cluster import top_archetypes
 
-        ids = np.asarray(st["embeddings"]["outfield_ids"]).astype(str)
-        loc = np.where(ids == player_id)[0]
-        if loc.size:
-            archetypes = responsibilities_for(st["gmm"], st["embeddings"]["outfield"][int(loc[0])])
+        archetypes = top_archetypes(st["gmm"], index.features[i])
+    elif role == "keeper":
+        from kindred.cluster import keeper_archetypes
+
+        archetypes = keeper_archetypes(index.features[i])
     radar_keys = {
         "outfield": [
             "npxg_p90",

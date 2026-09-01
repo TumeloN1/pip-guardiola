@@ -30,9 +30,9 @@ export default function MapPage() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <SiteHeader compact />
+      <SiteHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        <h1 className="text-3xl" style={{ fontFamily: "var(--font-serif)" }}>
+        <h1 className="font-heading text-4xl uppercase tracking-tight text-primary">
           Style map
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
@@ -42,7 +42,7 @@ export default function MapPage() {
         {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
         {!points && !error && <Skeleton className="mt-6 h-[480px] w-full" />}
         {points && layout && (
-          <div className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="relative mt-6 overflow-hidden border border-border bg-card">
             <svg viewBox="0 0 1000 640" className="h-[min(70vh,640px)] w-full">
               {points.map((p) => {
                 const x = ((p.x - layout.minX) / layout.w) * 960 + 20;
@@ -54,7 +54,7 @@ export default function MapPage() {
                       cx={x}
                       cy={y}
                       r={highlighted ? 5 : 2.2}
-                      fill={p.primary_pos === "FW" ? "#e8c547" : p.primary_pos === "DF" ? "#7eb8da" : "#b6e388"}
+                      fill={p.primary_pos === "FW" ? "#FF2882" : p.primary_pos === "DF" ? "#37003C" : "#00C853"}
                       opacity={highlighted ? 1 : 0.7}
                       onMouseEnter={() => setHover(p)}
                     >
@@ -67,7 +67,7 @@ export default function MapPage() {
               })}
             </svg>
             {hover && (
-              <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg bg-background/90 px-3 py-2 text-sm">
+              <div className="pointer-events-none absolute bottom-3 left-3 border border-border bg-white px-3 py-2 text-sm shadow-sm">
                 <div className="font-medium">{hover.player}</div>
                 <div className="text-muted-foreground">
                   {hover.season} · {hover.squad} · {hover.pos}

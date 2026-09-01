@@ -47,6 +47,7 @@ export type RadarPoint = {
 export type Archetype = {
   name: string;
   weight: number;
+  blurb?: string;
 };
 
 export type ProfileResponse = {
