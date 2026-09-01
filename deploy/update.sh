@@ -1,23 +1,42 @@
 #!/usr/bin/env bash
+# Rebuild pipguardiola.com from origin/main.
+# Safe to run as ubuntu or via sudo — git always runs as the repo owner so
+# .git/FETCH_HEAD does not end up root-owned.
 set -euo pipefail
-cd /opt/pip-guardiola
 
-git fetch origin
-branch="$(git rev-parse --abbrev-ref HEAD)"
-remote_ref="origin/${branch}"
+APP_DIR="${APP_DIR:-/opt/pip-guardiola}"
+cd "$APP_DIR"
 
-# A first-boot copy of this script may sit untracked on the box and block
-# git pull. Drop untracked files that the incoming revision wants to add.
-if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-  while IFS= read -r path; do
-    [[ -z "$path" ]] && continue
-    if [[ -e "$path" ]] && ! git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
-      rm -f "$path"
-    fi
-  done < <(git diff --name-only "HEAD...${remote_ref}")
+owner="$(stat -c '%U' "$APP_DIR")"
+group="$(stat -c '%G' "$APP_DIR")"
+
+if [[ ! -w .git || ( -e .git/FETCH_HEAD && ! -w .git/FETCH_HEAD ) ]]; then
+  sudo chown -R "${owner}:${group}" "$APP_DIR"
 fi
 
-git pull --ff-only
+as_owner() {
+  if [[ "$(id -un)" == "$owner" ]]; then
+    "$@"
+  else
+    sudo -u "$owner" -- "$@"
+  fi
+}
+
+as_owner git fetch origin
+branch="$(as_owner git rev-parse --abbrev-ref HEAD)"
+remote_ref="origin/${branch}"
+
+# Untracked first-boot copies (e.g. a hand-written deploy/update.sh) block ff-only.
+if as_owner git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    if [[ -e "$path" ]] && ! as_owner git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+      as_owner rm -f "$path"
+    fi
+  done < <(as_owner git diff --name-only "HEAD...${remote_ref}")
+fi
+
+as_owner git pull --ff-only
 
 compose() {
   if docker info >/dev/null 2>&1; then

@@ -33,6 +33,7 @@ if [[ ! -d "$APP_DIR/.git" ]]; then
   sudo git clone "$REPO_URL" "$APP_DIR"
   sudo chown -R "$USER:$USER" "$APP_DIR"
 else
+  sudo chown -R "$USER:$USER" "$APP_DIR"
   git -C "$APP_DIR" pull --ff-only
 fi
 
