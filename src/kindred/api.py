@@ -62,6 +62,10 @@ def _load_state() -> dict[str, Any]:
         from kindred.cluster import load_gmm
 
         gmm = load_gmm(GMM_NPZ)
+    from kindred.cluster import ARCHETYPE_CATALOG, leading_style_names
+
+    outfield_styles = leading_style_names(outfield.features, outfield.positions, outfield.primary_pos)
+    style_catalog = [spec["name"] for spec in ARCHETYPE_CATALOG]
     projection = None
     if PROJECTION_NPZ.exists():
         blob = np.load(PROJECTION_NPZ, allow_pickle=False)
@@ -74,6 +78,8 @@ def _load_state() -> dict[str, Any]:
         "encoder_gk": encoder_gk,
         "embeddings": embeddings,
         "gmm": gmm,
+        "outfield_styles": outfield_styles,
+        "style_catalog": style_catalog,
         "projection": projection,
         "eval": eval_report,
     }
@@ -408,6 +414,15 @@ def _pretty(name: str) -> str:
     return mapping.get(name, name)
 
 
+def _style_fields(st: dict[str, Any], role: str, n: int) -> dict:
+    if role != "outfield":
+        return {}
+    styles = st.get("outfield_styles") or []
+    if n >= len(styles):
+        return {}
+    return {"style": styles[n]}
+
+
 @app.get("/api/projection")
 def get_projection(role: str = "outfield", sample: int = 2500) -> dict:
     st = state()
@@ -421,14 +436,24 @@ def get_projection(role: str = "outfield", sample: int = 2500) -> dict:
             j = lookup.get(pid)
             if j is None:
                 continue
-            points.append(_row_payload(index, n, {"x": float(xy[j, 0]), "y": float(xy[j, 1])}))
+            points.append(
+                _row_payload(
+                    index,
+                    n,
+                    {
+                        "x": float(xy[j, 0]),
+                        "y": float(xy[j, 1]),
+                        **_style_fields(st, role, n),
+                    },
+                )
+            )
         source = "learned"
     else:
         from sklearn.decomposition import PCA
 
         xy = PCA(n_components=2, random_state=0).fit_transform(index.features)
         points = [
-            _row_payload(index, n, {"x": float(xy[n, 0]), "y": float(xy[n, 1])})
+            _row_payload(index, n, {"x": float(xy[n, 0]), "y": float(xy[n, 1]), **_style_fields(st, role, n)})
             for n in range(len(index.ids))
         ]
         source = "pca"
@@ -436,7 +461,8 @@ def get_projection(role: str = "outfield", sample: int = 2500) -> dict:
         rng = np.random.default_rng(0)
         pick = rng.choice(len(points), size=sample, replace=False)
         points = [points[i] for i in sorted(pick.tolist())]
-    return {"points": points, "source": source}
+    catalog = st.get("style_catalog") if role == "outfield" else []
+    return {"points": points, "source": source, "styles": catalog or []}
 
 
 def main(argv: list[str] | None = None) -> None:

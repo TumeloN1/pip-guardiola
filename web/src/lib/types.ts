@@ -77,4 +77,4 @@ export type MetaResponse = {
   examples: { id: string; label: string }[];
 };
 
-export type ProjectionPoint = PlayerHit & { x: number; y: number };
+export type ProjectionPoint = PlayerHit & { x: number; y: number; style?: string };

@@ -10,6 +10,7 @@ from kindred.cluster import (
     N_ARCHETYPES,
     fit_gmm,
     keeper_archetypes,
+    leading_style_names,
     load_gmm,
     save_gmm,
     top_archetypes,
@@ -149,6 +150,21 @@ def test_taa_is_not_a_false_nine():
         "Destroyer",
     }
     assert all(row["weight"] >= DISPLAY_THRESHOLD for row in rows)
+
+
+def test_leading_style_names_match_position_gate():
+    from kindred.similarity import build_index
+    import pandas as pd
+    from kindred.paths import FEATURES_PARQUET
+
+    index = build_index(pd.read_parquet(FEATURES_PARQUET), "outfield")
+    names = leading_style_names(index.features, index.positions, index.primary_pos)
+    taa = names[index.id_to_row()["cd1acf9d-2020"]]
+    kdb = names[index.id_to_row()["e46012d4-2020"]]
+    assert taa in _allowed_names("DF")
+    assert taa not in {"False nine", "Poacher", "Wide creator"}
+    assert kdb in _allowed_names("MF")
+    assert kdb != "False nine"
 
 
 def test_keeper_archetypes_are_named():

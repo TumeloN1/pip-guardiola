@@ -61,6 +61,8 @@ export function getSimilar(
   return getJson(`/api/players/${id}/similar?${qs}`, signal);
 }
 
-export function getProjection(role = "outfield"): Promise<{ points: ProjectionPoint[]; source: string }> {
+export function getProjection(
+  role = "outfield",
+): Promise<{ points: ProjectionPoint[]; source: string; styles?: string[] }> {
   return getJson(`/api/projection?role=${role}`);
 }
